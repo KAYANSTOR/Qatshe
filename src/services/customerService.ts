@@ -10,6 +10,7 @@ import {
   type Organization,
 } from '../domain/types';
 import { buildCleanExportFileName } from '../domain/formatters';
+import { syncCustomerToRailway } from './authService';
 import { allocateNextDocumentNumber, generateUuid, getOrCreateDeviceId, runSafeDbWrite } from './device';
 
 export async function saveCustomer(params: {
@@ -35,7 +36,7 @@ export async function saveCustomer(params: {
 
   const deviceId = await getOrCreateDeviceId();
 
-  return runSafeDbWrite(() =>
+  const saved = await runSafeDbWrite(() =>
     db.transaction(
       'rw',
       [db.customers, db.ledgerEntries, db.kvMeta, db.syncOperations, db.auditLogs],
@@ -172,6 +173,11 @@ export async function saveCustomer(params: {
       }
     )
   );
+
+  if (typeof window !== 'undefined') {
+    syncCustomerToRailway(saved).catch(() => {});
+  }
+  return saved;
 }
 
 export function exportCustomersToWorkbook(customers: Customer[], format: 'xlsx' | 'csv'): void {

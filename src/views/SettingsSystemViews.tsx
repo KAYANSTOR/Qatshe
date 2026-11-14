@@ -13,6 +13,7 @@ import {
   HelpCircle,
   History,
   Lock,
+  LogOut,
   MessageSquare,
   Plus,
   Receipt,
@@ -700,6 +701,8 @@ export const SettingsView: React.FC = () => {
   const {
     org,
     activeUser,
+    authUser,
+    logoutCloudAccount,
     messagingConfig,
     darkMode,
     toggleDarkMode,
@@ -907,17 +910,43 @@ export const SettingsView: React.FC = () => {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setLocked(true);
-                navigate('login');
-              }}
-              className="w-full min-h-[46px] px-4 rounded-[14px] bg-[#FCECE9] dark:bg-[#3A1915] border border-[#F5CEC7] dark:border-[#5D2922] text-[#B93829] dark:text-[#F49387] text-xs font-bold inline-flex items-center justify-center gap-2 active:scale-[0.985] transition-transform cursor-pointer"
-            >
-              <Lock className="h-4 w-4" />
-              قفل الجلسة وتبديل المستخدم
-            </button>
+            {authUser && (
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <div className="text-[#657369] dark:text-[#98A89C]">
+                  رقم الحساب المرتبط
+                </div>
+                <div className="font-bold tabular-nums text-[#16281E] dark:text-[#EEF2EC]" dir="ltr">
+                  {authUser.phone}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setLocked(true);
+                  navigate('login');
+                }}
+                className="w-full min-h-[46px] px-4 rounded-[14px] bg-[#F5EFE3] dark:bg-[#2F2513] border border-[#E5D7BD] dark:border-[#4E3D1E] text-[#7A5316] dark:text-[#EBB354] text-xs font-bold inline-flex items-center justify-center gap-2 active:scale-[0.985] transition-transform cursor-pointer"
+              >
+                <Lock className="h-4 w-4" />
+                قفل الجلسة وتبديل المستخدم
+              </button>
+
+              {authUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    logoutCloudAccount().catch(() => {});
+                  }}
+                  className="w-full min-h-[46px] px-4 rounded-[14px] bg-[#FCECE9] dark:bg-[#3A1915] border border-[#F5CEC7] dark:border-[#5D2922] text-[#B93829] dark:text-[#F49387] text-xs font-bold inline-flex items-center justify-center gap-2 active:scale-[0.985] transition-transform cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                  تسجيل الخروج من الحساب
+                </button>
+              )}
+            </div>
           </div>
         </SurfaceCard>
       )}

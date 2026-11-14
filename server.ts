@@ -89,9 +89,39 @@ function ensureTenantAuth(
 let storeLock: Promise<void> = Promise.resolve();
 
 type AuthAccount = { id: string; phone: string; ownerName: string; codeHash: string; projectId: string | null; projectName: string | null };
-const database = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }) : null;
+type RemoteCustomerRow = {
+  id: string;
+  projectId: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  balance: number;
+  category: string;
+  creditLimit: number;
+  status: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function createPostgresPool(): Pool | null {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) return null;
+  const disableSsl =
+    url.includes('sslmode=disable') ||
+    url.includes('localhost') ||
+    url.includes('127.0.0.1') ||
+    url.includes('.railway.internal');
+  return new Pool({
+    connectionString: url,
+    ssl: disableSsl ? false : { rejectUnauthorized: false },
+  });
+}
+
+const database = createPostgresPool();
 const memoryAccounts = new Map<string, AuthAccount>();
 const memorySessions = new Map<string, string>();
+const memoryCustomers = new Map<string, RemoteCustomerRow[]>();
 
 function normalizeDigits(value: string) {
   return value.replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).replace(/\D/g, '');
@@ -124,19 +154,68 @@ function readCookie(req: express.Request, name: string) {
   return item ? decodeURIComponent(item.slice(name.length + 1)) : '';
 }
 
-function setSessionCookie(req: express.Request, res: express.Response, token: string) {
+function isSecureCookieRequest(req: express.Request): boolean {
   const local = ['localhost', '127.0.0.1'].includes(req.hostname);
-  const secure = !local;
-  res.setHeader('Set-Cookie', `qatshi_session=${encodeURIComponent(token)}; Path=/; HttpOnly; Max-Age=2592000; SameSite=${secure ? 'None' : 'Lax'}${secure ? '; Secure' : ''}`);
+  if (local) return false;
+  return req.secure || req.header('x-forwarded-proto') === 'https';
+}
+
+function setSessionCookie(req: express.Request, res: express.Response, token: string) {
+  const secure = isSecureCookieRequest(req);
+  res.setHeader(
+    'Set-Cookie',
+    `qatshi_session=${encodeURIComponent(token)}; Path=/; HttpOnly; Max-Age=2592000; SameSite=${secure ? 'None' : 'Lax'}${secure ? '; Secure' : ''}`
+  );
+}
+
+function clearSessionCookie(req: express.Request, res: express.Response) {
+  const secure = isSecureCookieRequest(req);
+  res.setHeader(
+    'Set-Cookie',
+    `qatshi_session=; Path=/; HttpOnly; Max-Age=0; SameSite=${secure ? 'None' : 'Lax'}${secure ? '; Secure' : ''}`
+  );
 }
 
 async function initializeDatabase() {
   if (!database) return;
   await database.query(`
-    CREATE TABLE IF NOT EXISTS qatshi_accounts (id TEXT PRIMARY KEY, phone TEXT NOT NULL UNIQUE, owner_name TEXT NOT NULL, code_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS qatshi_projects (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES qatshi_accounts(id) ON DELETE CASCADE, name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS qatshi_sessions (token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES qatshi_accounts(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL);
-    CREATE TABLE IF NOT EXISTS qatshi_customers (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES qatshi_projects(id) ON DELETE CASCADE, full_name TEXT NOT NULL, phone TEXT NOT NULL, address TEXT DEFAULT '', balance NUMERIC NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), UNIQUE(project_id, phone));
+    CREATE TABLE IF NOT EXISTS qatshi_accounts (
+      id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL UNIQUE,
+      owner_name TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS qatshi_projects (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL REFERENCES qatshi_accounts(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS qatshi_sessions (
+      token_hash TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES qatshi_accounts(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS qatshi_customers (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES qatshi_projects(id) ON DELETE CASCADE,
+      full_name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT DEFAULT '',
+      balance NUMERIC NOT NULL DEFAULT 0,
+      category TEXT NOT NULL DEFAULT 'regular',
+      credit_limit NUMERIC NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(project_id, phone)
+    );
+    ALTER TABLE qatshi_customers ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'regular';
+    ALTER TABLE qatshi_customers ADD COLUMN IF NOT EXISTS credit_limit NUMERIC NOT NULL DEFAULT 0;
+    ALTER TABLE qatshi_customers ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+    ALTER TABLE qatshi_customers ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';
     CREATE INDEX IF NOT EXISTS qatshi_customers_project_idx ON qatshi_customers(project_id);
   `);
 }
@@ -148,19 +227,38 @@ async function accountFromRequest(req: express.Request): Promise<AuthAccount | n
     const accountId = memorySessions.get(hashSessionToken(token));
     return accountId ? [...memoryAccounts.values()].find((account) => account.id === accountId) || null : null;
   }
-  const result = await database.query(`SELECT a.id, a.phone, a.owner_name AS "ownerName", a.code_hash AS "codeHash", p.id AS "projectId", p.name AS "projectName" FROM qatshi_sessions s JOIN qatshi_accounts a ON a.id=s.account_id LEFT JOIN qatshi_projects p ON p.owner_id=a.id WHERE s.token_hash=$1 AND s.expires_at > NOW() LIMIT 1`, [hashSessionToken(token)]);
+  const result = await database.query(
+    `SELECT a.id, a.phone, a.owner_name AS "ownerName", a.code_hash AS "codeHash", p.id AS "projectId", p.name AS "projectName"
+     FROM qatshi_sessions s
+     JOIN qatshi_accounts a ON a.id = s.account_id
+     LEFT JOIN qatshi_projects p ON p.owner_id = a.id
+     WHERE s.token_hash = $1 AND s.expires_at > NOW()
+     LIMIT 1`,
+    [hashSessionToken(token)]
+  );
   return (result.rows[0] as AuthAccount | undefined) || null;
 }
 
 async function createAuthSession(req: express.Request, res: express.Response, account: AuthAccount) {
   const token = crypto.randomBytes(32).toString('base64url');
   if (!database) memorySessions.set(hashSessionToken(token), account.id);
-  else await database.query(`INSERT INTO qatshi_sessions(token_hash, account_id, expires_at) VALUES($1,$2,NOW()+INTERVAL '30 days')`, [hashSessionToken(token), account.id]);
+  else {
+    await database.query(
+      `INSERT INTO qatshi_sessions(token_hash, account_id, expires_at) VALUES($1, $2, NOW() + INTERVAL '30 days')`,
+      [hashSessionToken(token), account.id]
+    );
+  }
   setSessionCookie(req, res, token);
 }
 
 function publicAccount(account: AuthAccount) {
-  return { id: account.id, phone: account.phone, ownerName: account.ownerName, projectId: account.projectId, projectName: account.projectName };
+  return {
+    id: account.id,
+    phone: account.phone,
+    ownerName: account.ownerName,
+    projectId: account.projectId,
+    projectName: account.projectName,
+  };
 }
 
 function withStoreLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -191,15 +289,25 @@ async function saveSyncStore(store: StoredSyncData): Promise<void> {
 
 export function createQatshiApp() {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(express.json({ limit: '15mb' }));
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, service: 'qatshi-sync', timestamp: new Date().toISOString() });
+    res.json({
+      ok: true,
+      service: 'qatshi-sync',
+      database: database ? 'postgres' : 'memory',
+      timestamp: new Date().toISOString(),
+    });
   });
 
   app.get('/api/auth/me', async (req, res) => {
-    const account = await accountFromRequest(req);
-    res.json(account ? { authenticated: true, user: publicAccount(account) } : { authenticated: false });
+    try {
+      const account = await accountFromRequest(req);
+      res.json(account ? { authenticated: true, user: publicAccount(account) } : { authenticated: false });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'تعذر التحقق من الجلسة' });
+    }
   });
 
   app.post('/api/auth/register', async (req, res) => {
@@ -238,42 +346,127 @@ export function createQatshiApp() {
       const { phone, code } = validatePhoneAndCode(req.body?.phone, req.body?.code);
       let account: AuthAccount | undefined;
       if (database) {
-        const result = await database.query(`SELECT a.id, a.phone, a.owner_name AS "ownerName", a.code_hash AS "codeHash", p.id AS "projectId", p.name AS "projectName" FROM qatshi_accounts a LEFT JOIN qatshi_projects p ON p.owner_id=a.id WHERE a.phone=$1 LIMIT 1`, [phone]);
+        const result = await database.query(
+          `SELECT a.id, a.phone, a.owner_name AS "ownerName", a.code_hash AS "codeHash", p.id AS "projectId", p.name AS "projectName"
+           FROM qatshi_accounts a
+           LEFT JOIN qatshi_projects p ON p.owner_id = a.id
+           WHERE a.phone = $1
+           LIMIT 1`,
+          [phone]
+        );
         account = result.rows[0] as AuthAccount | undefined;
-      } else account = memoryAccounts.get(phone);
-      if (!account || !verifyNumericCode(code, account.codeHash)) { res.status(401).json({ error: 'رقم الهاتف أو الرمز غير صحيح' }); return; }
+      } else {
+        account = memoryAccounts.get(phone);
+      }
+      if (!account || !verifyNumericCode(code, account.codeHash)) {
+        res.status(401).json({ error: 'رقم الهاتف أو الرمز غير صحيح' });
+        return;
+      }
       await createAuthSession(req, res, account);
       res.json({ ok: true, user: publicAccount(account) });
     } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر تسجيل الدخول' }); }
   });
 
   app.post('/api/auth/logout', async (req, res) => {
-    const token = readCookie(req, 'qatshi_session');
-    if (token) {
-      if (database) await database.query('DELETE FROM qatshi_sessions WHERE token_hash=$1', [hashSessionToken(token)]);
-      else memorySessions.delete(hashSessionToken(token));
+    try {
+      const token = readCookie(req, 'qatshi_session');
+      if (token) {
+        if (database) await database.query('DELETE FROM qatshi_sessions WHERE token_hash=$1', [hashSessionToken(token)]);
+        else memorySessions.delete(hashSessionToken(token));
+      }
+      clearSessionCookie(req, res);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'تعذر تسجيل الخروج' });
     }
-    res.setHeader('Set-Cookie', 'qatshi_session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax');
-    res.json({ ok: true });
   });
 
   app.get('/api/customers', async (req, res) => {
-    const account = await accountFromRequest(req);
-    if (!account?.projectId) { res.status(401).json({ error: 'يجب تسجيل الدخول أولًا' }); return; }
-    if (!database) { res.json({ ok: true, customers: [] }); return; }
-    const result = await database.query('SELECT id, full_name AS "fullName", phone, address, balance, created_at AS "createdAt", updated_at AS "updatedAt" FROM qatshi_customers WHERE project_id=$1 ORDER BY created_at DESC', [account.projectId]);
-    res.json({ ok: true, customers: result.rows });
+    try {
+      const account = await accountFromRequest(req);
+      if (!account?.projectId) { res.status(401).json({ error: 'يجب تسجيل الدخول أولًا' }); return; }
+      if (!database) {
+        res.json({ ok: true, customers: memoryCustomers.get(account.projectId) || [] });
+        return;
+      }
+      const result = await database.query(
+        `SELECT id, project_id AS "projectId", full_name AS "fullName", phone, address, balance::float8 AS balance, category, credit_limit::float8 AS "creditLimit", status, notes, created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM qatshi_customers
+         WHERE project_id = $1
+         ORDER BY updated_at DESC`,
+        [account.projectId]
+      );
+      res.json({ ok: true, customers: result.rows });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'تعذر جلب العملاء' });
+    }
   });
 
   app.post('/api/customers', async (req, res) => {
-    const account = await accountFromRequest(req);
-    if (!account?.projectId) { res.status(401).json({ error: 'يجب تسجيل الدخول أولًا' }); return; }
-    const fullName = String(req.body?.fullName || '').trim();
-    const phone = normalizeDigits(String(req.body?.phone || ''));
-    if (!fullName || !/^\d{7,15}$/.test(phone)) { res.status(400).json({ error: 'اسم العميل ورقم الهاتف مطلوبان' }); return; }
-    if (!database) { res.status(201).json({ ok: true, customer: { id: newId('cust'), fullName, phone } }); return; }
-    const result = await database.query('INSERT INTO qatshi_customers(id,project_id,full_name,phone,address,balance) VALUES($1,$2,$3,$4,$5,$6) RETURNING id, full_name AS "fullName", phone, address, balance', [newId('cust'), account.projectId, fullName, phone, String(req.body?.address || ''), Number(req.body?.balance || 0)]);
-    res.status(201).json({ ok: true, customer: result.rows[0] });
+    try {
+      const account = await accountFromRequest(req);
+      if (!account?.projectId) { res.status(401).json({ error: 'يجب تسجيل الدخول أولًا' }); return; }
+      const fullName = String(req.body?.fullName || '').trim();
+      const phone = normalizeDigits(String(req.body?.phone || ''));
+      if (!fullName || !/^\d{7,15}$/.test(phone)) {
+        res.status(400).json({ error: 'اسم العميل ورقم الهاتف الصحيح مطلوبان' });
+        return;
+      }
+      const id = String(req.body?.id || '').trim() || newId('cust');
+      const address = String(req.body?.address || '').trim();
+      const balance = Number(req.body?.balance || 0) || 0;
+      const category = ['vip', 'wholesale', 'regular'].includes(String(req.body?.category))
+        ? String(req.body?.category)
+        : 'regular';
+      const creditLimit = Number(req.body?.creditLimit || 0) || 0;
+      const status = req.body?.status === 'inactive' ? 'inactive' : 'active';
+      const notes = String(req.body?.notes || '').trim();
+      const now = new Date().toISOString();
+
+      if (!database) {
+        const list = memoryCustomers.get(account.projectId) || [];
+        const existingIdx = list.findIndex((c) => c.phone === phone || c.id === id);
+        const record: RemoteCustomerRow = {
+          id: existingIdx >= 0 ? list[existingIdx].id : id,
+          projectId: account.projectId,
+          fullName,
+          phone,
+          address,
+          balance,
+          category,
+          creditLimit,
+          status,
+          notes,
+          createdAt: existingIdx >= 0 ? list[existingIdx].createdAt : now,
+          updatedAt: now,
+        };
+        if (existingIdx >= 0) list[existingIdx] = record;
+        else list.unshift(record);
+        memoryCustomers.set(account.projectId, list);
+        res.status(201).json({ ok: true, customer: record });
+        return;
+      }
+
+      const result = await database.query(
+        `INSERT INTO qatshi_customers(id, project_id, full_name, phone, address, balance, category, credit_limit, status, notes, updated_at)
+         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+         ON CONFLICT (project_id, phone)
+         DO UPDATE SET
+           full_name = EXCLUDED.full_name,
+           address = EXCLUDED.address,
+           balance = EXCLUDED.balance,
+           category = EXCLUDED.category,
+           credit_limit = EXCLUDED.credit_limit,
+           status = EXCLUDED.status,
+           notes = EXCLUDED.notes,
+           updated_at = NOW()
+         RETURNING id, project_id AS "projectId", full_name AS "fullName", phone, address, balance::float8 AS balance, category, credit_limit::float8 AS "creditLimit", status, notes, created_at AS "createdAt", updated_at AS "updatedAt"`,
+        [id, account.projectId, fullName, phone, address, balance, category, creditLimit, status, notes]
+      );
+      res.status(201).json({ ok: true, customer: result.rows[0] });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'تعذر حفظ العميل' });
+    }
   });
 
   app.post('/api/sync/push', async (req, res) => {

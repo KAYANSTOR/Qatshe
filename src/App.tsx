@@ -1,8 +1,10 @@
 import React from 'react';
 import { QatshiProvider, useQatshi } from './context/QatshiContext';
 import { AppShell } from './components/layout/AppShell';
+import { BrandLogo } from './components/ui/LuxuryUI';
 import { AccountAuthView } from './views/AccountAuthView';
-import { getCurrentAuthUser } from './services/authService';
+import { getCurrentAuthUser, logoutAuth, type AuthUser } from './services/authService';
+import { getMeta, setMeta } from './services/device';
 import {
   CustomerFormView,
   CustomerProfileView,
@@ -108,26 +110,76 @@ const ScreenRouter: React.FC = () => {
   }
 };
 
-const AuthGate: React.FC = () => {
+export default function App() {
   const [checking, setChecking] = React.useState(true);
-  const [authenticated, setAuthenticated] = React.useState(false);
+  const [authUser, setAuthUser] = React.useState<AuthUser | null>(null);
+  const [darkMode, setDarkMode] = React.useState(false);
 
   React.useEffect(() => {
-    getCurrentAuthUser().then((user) => {
-      setAuthenticated(Boolean(user));
-      setChecking(false);
+    let mounted = true;
+    Promise.all([getCurrentAuthUser(), getMeta('themeMode')])
+      .then(([user, theme]) => {
+        if (!mounted) return;
+        if (theme === 'dark' && typeof document !== 'undefined') {
+          document.documentElement.classList.add('dark');
+          setDarkMode(true);
+        }
+        setAuthUser(user);
+        setChecking(false);
+      })
+      .catch(() => {
+        if (mounted) setChecking(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const toggleAuthDarkMode = React.useCallback(() => {
+    setDarkMode((prev) => {
+      const next = !prev;
+      if (typeof document !== 'undefined') {
+        document.documentElement.classList.toggle('dark', next);
+      }
+      setMeta('themeMode', next ? 'dark' : 'light').catch(() => {});
+      return next;
     });
   }, []);
 
-  if (checking) return <div className="min-h-screen bg-[#0F1F17]" />;
-  if (!authenticated) return <AccountAuthView onAuthenticated={() => setAuthenticated(true)} />;
-  return <AppShell><ScreenRouter /></AppShell>;
-};
+  const handleCloudLogout = React.useCallback(async () => {
+    await logoutAuth().catch(() => {});
+    setAuthUser(null);
+  }, []);
 
-export default function App() {
+  if (checking) {
+    return (
+      <div
+        dir="rtl"
+        className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#F7F5EE] dark:bg-[#0B1710] text-[#16281E] dark:text-[#EEF2EC] p-6"
+      >
+        <BrandLogo size="lg" showWordmark />
+        <p className="text-xs font-medium text-[#657369] dark:text-[#98A89C]">
+          جارٍ التحقق من الجلسة...
+        </p>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <AccountAuthView
+        onAuthenticated={(user) => setAuthUser(user)}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleAuthDarkMode}
+      />
+    );
+  }
+
   return (
-    <QatshiProvider>
-      <AuthGate />
+    <QatshiProvider authUser={authUser} onCloudLogout={handleCloudLogout}>
+      <AppShell>
+        <ScreenRouter />
+      </AppShell>
     </QatshiProvider>
   );
 }

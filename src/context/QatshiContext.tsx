@@ -21,6 +21,7 @@ import type {
   SyncOperation,
 } from '../domain/types';
 import { getMeta, requestAndCheckPersistentStorage, setMeta } from '../services/device';
+import { ensureLocalProjectInitialized, type AuthUser } from '../services/authService';
 import { initGoogleDriveAuth } from '../services/googleAuthService';
 import { getDriveBackupState, runDriveBackupCatchUp } from '../services/googleDriveBackupScheduler';
 import { subscribeSmsDeliveryUpdates } from '../services/nativeSmsBridge';
@@ -80,6 +81,8 @@ interface QatshiContextValue {
   refreshDriveBackupState: () => Promise<void>;
   switchOrganization: (orgId: string) => Promise<void>;
   switchUser: (user: AppUser) => Promise<void>;
+  authUser: AuthUser | null;
+  logoutCloudAccount: () => Promise<void>;
 }
 
 const QatshiContext = createContext<QatshiContextValue | null>(null);
@@ -87,7 +90,11 @@ const QatshiContext = createContext<QatshiContextValue | null>(null);
 const UI_HISTORY_LIMIT = 400;
 const UI_CUSTOMER_LIMIT = 1000;
 
-export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const QatshiProvider: React.FC<{
+  children: React.ReactNode;
+  authUser?: AuthUser | null;
+  onCloudLogout?: () => Promise<void>;
+}> = ({ children, authUser = null, onCloudLogout }) => {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<AppScreen>('splash');
   const [screenParams, setScreenParams] = useState<ScreenParams>({});
@@ -327,6 +334,9 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (active) setDarkMode(true);
       }
 
+      if (authUser) {
+        await ensureLocalProjectInitialized(authUser);
+      }
       const orgId = await resolveInitialOrganizationId();
       await requestAndCheckPersistentStorage();
       if (!active) return;
@@ -342,14 +352,20 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setTimeout(() => {
         if (active) {
-          setScreen((curr) => (curr === 'splash' ? 'dashboard' : curr));
+          setScreen((curr) => (curr === 'splash' || curr === 'setup' ? 'dashboard' : curr));
         }
       }, 350);
     })();
     return () => {
       active = false;
     };
-  }, [loadOrgSnapshot]);
+  }, [loadOrgSnapshot, authUser?.id, authUser?.projectId]);
+
+  const logoutCloudAccount = useCallback(async () => {
+    if (onCloudLogout) {
+      await onCloudLogout();
+    }
+  }, [onCloudLogout]);
 
   useEffect(() => {
     if (!org || !org.autoLockMinutes || org.autoLockMinutes <= 0 || !activeUser?.hasPin || isLocked) {
@@ -454,6 +470,8 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         refreshDriveBackupState,
         switchOrganization,
         switchUser,
+        authUser,
+        logoutCloudAccount,
       }}
     >
       {children}
