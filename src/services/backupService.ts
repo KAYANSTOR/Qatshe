@@ -2,9 +2,15 @@ import { db } from '../db/qatshiDb';
 import { toLocalDateKey } from '../domain/money';
 import type { BackupRecord, Organization } from '../domain/types';
 import { buildCleanExportFileName } from '../domain/formatters';
+import { verifyAndRepairLedgerIntegrity } from './accountingService';
 import { generateTenantSecret, generateUuid, runSafeDbWrite, setMeta } from './device';
 
-export const CURRENT_BACKUP_SCHEMA_VERSION = 2;
+export const CURRENT_BACKUP_SCHEMA_VERSION = 3;
+
+export interface BackupSequenceEntry {
+  key: string;
+  value: string;
+}
 
 export interface BackupPayload {
   schemaVersion: number;
@@ -29,12 +35,14 @@ export interface BackupPayload {
     messageLogs: unknown[];
     messagingConfigs: unknown[];
     auditLogs: unknown[];
+    sequences?: BackupSequenceEntry[];
   };
 }
 
 interface EncryptedEnvelope {
   encrypted: true;
   algorithm: 'AES-GCM';
+  keyLengthBits?: 256;
   saltB64: string;
   ivB64: string;
   cipherB64: string;
@@ -56,7 +64,7 @@ function fromBase64(b64: string): Uint8Array {
   return out;
 }
 
-async function sha256Hex(text: string): Promise<string> {
+export async function sha256Hex(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest))
@@ -84,6 +92,15 @@ async function deriveAesKey(password: string, salt: Uint8Array): Promise<CryptoK
     false,
     ['encrypt', 'decrypt']
   );
+}
+
+function stripSensitiveOrgFields(org: Partial<Organization>): Partial<Organization> {
+  const copy: Record<string, unknown> = { ...org };
+  delete copy.orgAuthSecret;
+  delete copy.oauthToken;
+  delete copy.accessToken;
+  delete copy.refreshToken;
+  return copy as Partial<Organization>;
 }
 
 export function migrateBackupPayload(raw: BackupPayload): BackupPayload {
@@ -116,6 +133,7 @@ export function migrateBackupPayload(raw: BackupPayload): BackupPayload {
       messageLogs: Array.isArray(raw.data.messageLogs) ? raw.data.messageLogs : [],
       messagingConfigs: Array.isArray(raw.data.messagingConfigs) ? raw.data.messagingConfigs : [],
       auditLogs: Array.isArray(raw.data.auditLogs) ? raw.data.auditLogs : [],
+      sequences: Array.isArray(raw.data.sequences) ? raw.data.sequences : [],
     },
   };
 }
@@ -123,73 +141,109 @@ export function migrateBackupPayload(raw: BackupPayload): BackupPayload {
 export async function createOrganizationBackup(params: {
   orgId: string;
   password?: string;
-  storageType?: 'local_file' | 'cloud_optional';
-}): Promise<{ fileContent: string; fileName: string; record: BackupRecord }> {
-  const org = await db.organizations.get(params.orgId);
-  if (!org) throw new Error('المؤسسة غير موجودة');
+  storageType?: BackupRecord['storageType'];
+  backupKind?: BackupRecord['backupKind'];
+  remoteAccountEmail?: string;
+}): Promise<{
+  fileContent: string;
+  fileName: string;
+  fileSha256: string;
+  dataChecksum: string;
+  record: BackupRecord;
+}> {
+  const readTables = [
+    db.organizations,
+    db.users,
+    db.customers,
+    db.products,
+    db.sales,
+    db.payments,
+    db.ledgerEntries,
+    db.expenses,
+    db.cashboxSessions,
+    db.messageTemplates,
+    db.offers,
+    db.campaigns,
+    db.messageLogs,
+    db.messagingConfigs,
+    db.auditLogs,
+    db.kvMeta,
+  ];
 
-  const [
-    users,
-    customers,
-    products,
-    sales,
-    payments,
-    ledgerEntries,
-    expenses,
-    cashboxSessions,
-    messageTemplates,
-    offers,
-    campaigns,
-    messageLogs,
-    messagingConfigs,
-    auditLogs,
-  ] = await Promise.all([
-    db.users.where('orgId').equals(params.orgId).toArray(),
-    db.customers.where('orgId').equals(params.orgId).toArray(),
-    db.products.where('orgId').equals(params.orgId).toArray(),
-    db.sales.where('orgId').equals(params.orgId).toArray(),
-    db.payments.where('orgId').equals(params.orgId).toArray(),
-    db.ledgerEntries.where('orgId').equals(params.orgId).toArray(),
-    db.expenses.where('orgId').equals(params.orgId).toArray(),
-    db.cashboxSessions.where('orgId').equals(params.orgId).toArray(),
-    db.messageTemplates.where('orgId').equals(params.orgId).toArray(),
-    db.offers.where('orgId').equals(params.orgId).toArray(),
-    db.campaigns.where('orgId').equals(params.orgId).toArray(),
-    db.messageLogs.where('orgId').equals(params.orgId).toArray(),
-    db.messagingConfigs.where('orgId').equals(params.orgId).toArray(),
-    db.auditLogs.where('orgId').equals(params.orgId).toArray(),
-  ]);
+  // Single consistent read-only IndexedDB snapshot transaction so mid-write data cannot tear
+  const snapshot = await db.transaction('r', readTables, async () => {
+    const org = await db.organizations.get(params.orgId);
+    if (!org) throw new Error('المؤسسة غير موجودة');
 
-  const data = {
-    organization: org,
-    users,
-    customers,
-    products,
-    sales,
-    payments,
-    ledgerEntries,
-    expenses,
-    cashboxSessions,
-    messageTemplates,
-    offers,
-    campaigns,
-    messageLogs,
-    messagingConfigs,
-    auditLogs,
-  };
+    const [
+      users,
+      customers,
+      products,
+      sales,
+      payments,
+      ledgerEntries,
+      expenses,
+      cashboxSessions,
+      messageTemplates,
+      offers,
+      campaigns,
+      messageLogs,
+      messagingConfigs,
+      auditLogs,
+      sequences,
+    ] = await Promise.all([
+      db.users.where('orgId').equals(params.orgId).toArray(),
+      db.customers.where('orgId').equals(params.orgId).toArray(),
+      db.products.where('orgId').equals(params.orgId).toArray(),
+      db.sales.where('orgId').equals(params.orgId).toArray(),
+      db.payments.where('orgId').equals(params.orgId).toArray(),
+      db.ledgerEntries.where('orgId').equals(params.orgId).toArray(),
+      db.expenses.where('orgId').equals(params.orgId).toArray(),
+      db.cashboxSessions.where('orgId').equals(params.orgId).toArray(),
+      db.messageTemplates.where('orgId').equals(params.orgId).toArray(),
+      db.offers.where('orgId').equals(params.orgId).toArray(),
+      db.campaigns.where('orgId').equals(params.orgId).toArray(),
+      db.messageLogs.where('orgId').equals(params.orgId).toArray(),
+      db.messagingConfigs.where('orgId').equals(params.orgId).toArray(),
+      db.auditLogs.where('orgId').equals(params.orgId).toArray(),
+      db.kvMeta.where('key').startsWith(`seq:${params.orgId}:`).toArray(),
+    ]);
 
-  const dataJson = JSON.stringify(data);
+    return {
+      org,
+      data: {
+        organization: stripSensitiveOrgFields(org),
+        users,
+        customers,
+        products,
+        sales,
+        payments,
+        ledgerEntries,
+        expenses,
+        cashboxSessions,
+        messageTemplates,
+        offers,
+        campaigns,
+        messageLogs,
+        messagingConfigs,
+        auditLogs,
+        sequences,
+      },
+    };
+  });
+
+  const dataJson = JSON.stringify(snapshot.data);
   const checksum = await sha256Hex(dataJson);
   const exportedAt = new Date().toISOString();
 
   const payload: BackupPayload = {
     schemaVersion: CURRENT_BACKUP_SCHEMA_VERSION,
     app: 'QATSHI',
-    orgId: org.id,
-    orgName: org.name,
+    orgId: snapshot.org.id,
+    orgName: snapshot.org.name,
     exportedAt,
     checksum,
-    data,
+    data: snapshot.data,
   };
 
   let fileContent = JSON.stringify(payload, null, 2);
@@ -208,48 +262,59 @@ export async function createOrganizationBackup(params: {
     const envelope: EncryptedEnvelope = {
       encrypted: true,
       algorithm: 'AES-GCM',
+      keyLengthBits: 256,
       saltB64: toBase64(salt),
       ivB64: toBase64(iv),
       cipherB64: toBase64(new Uint8Array(cipherBuf)),
-      orgId: org.id,
-      orgName: org.name,
+      orgId: snapshot.org.id,
+      orgName: snapshot.org.name,
       exportedAt,
     };
     fileContent = JSON.stringify(envelope, null, 2);
   }
 
+  const fileSha256 = await sha256Hex(fileContent);
   const recordCount =
-    users.length +
-    customers.length +
-    products.length +
-    sales.length +
-    payments.length +
-    ledgerEntries.length +
-    expenses.length;
+    snapshot.data.users.length +
+    snapshot.data.customers.length +
+    snapshot.data.products.length +
+    snapshot.data.sales.length +
+    snapshot.data.payments.length +
+    snapshot.data.ledgerEntries.length +
+    snapshot.data.expenses.length;
 
   const sizeBytes = new Blob([fileContent]).size;
   const record: BackupRecord = {
     id: generateUuid(),
-    orgId: org.id,
+    orgId: snapshot.org.id,
     createdAt: exportedAt,
     recordCount,
     sizeBytes,
     encrypted,
     checksum,
+    sha256: fileSha256,
+    backupKind: params.backupKind,
+    remoteAccountEmail: params.remoteAccountEmail,
     storageType: params.storageType ?? 'local_file',
   };
 
   await runSafeDbWrite(async () => {
     await db.backupRecords.put(record);
-    await setMeta(`lastBackupAt:${org.id}`, exportedAt);
+    await setMeta(`lastBackupAt:${snapshot.org.id}`, exportedAt);
   });
 
   const stamp = toLocalDateKey(exportedAt);
   const fileName = buildCleanExportFileName(
-    ['نسخة-احتياطية', org.name, stamp, encrypted ? 'مشفرة' : ''],
+    ['نسخة-احتياطية', snapshot.org.name, stamp, encrypted ? 'مشفرة' : ''],
     'qatshi.json'
   );
-  return { fileContent, fileName, record };
+  return {
+    fileContent,
+    fileName,
+    fileSha256,
+    dataChecksum: checksum,
+    record,
+  };
 }
 
 export async function parseAndVerifyBackupFile(params: {
@@ -257,7 +322,13 @@ export async function parseAndVerifyBackupFile(params: {
   password?: string;
   currentOrgId: string;
   allowCrossOrgRestore: boolean;
-}): Promise<{ payload: BackupPayload; isCrossOrg: boolean }> {
+  expectedFileSha256?: string;
+}): Promise<{ payload: BackupPayload; isCrossOrg: boolean; fileSha256: string }> {
+  const actualFileSha256 = await sha256Hex(params.rawText);
+  if (params.expectedFileSha256 && actualFileSha256 !== params.expectedFileSha256) {
+    throw new Error('فشل التحقق من بصمة SHA-256 للملف — قد يكون الملف تالفاً أثناء النقل أو التنزيل');
+  }
+
   let parsed: Partial<BackupPayload & EncryptedEnvelope>;
   try {
     parsed = JSON.parse(params.rawText) as Partial<BackupPayload & EncryptedEnvelope>;
@@ -297,7 +368,7 @@ export async function parseAndVerifyBackupFile(params: {
     throw new Error('فشل التحقق من سلامة النسخة الاحتياطية — قد يكون الملف معدلاً أو تالفاً');
   }
 
-  const isCrossOrg = payload.orgId !== params.currentOrgId;
+  const isCrossOrg = Boolean(params.currentOrgId && payload.orgId !== params.currentOrgId);
   if (isCrossOrg && !params.allowCrossOrgRestore) {
     throw new Error(
       `CROSS_ORG_MISMATCH:تحذير: هذه النسخة تخص مؤسسة مختلفة (${payload.orgName}). يرجى تأكيد الاستعادة الصريحة.`
@@ -305,7 +376,7 @@ export async function parseAndVerifyBackupFile(params: {
   }
 
   const migrated = migrateBackupPayload(payload);
-  return { payload: migrated, isCrossOrg };
+  return { payload: migrated, isCrossOrg, fileSha256: actualFileSha256 };
 }
 
 export async function restoreBackupPayload(payload: BackupPayload): Promise<void> {
@@ -327,6 +398,7 @@ export async function restoreBackupPayload(payload: BackupPayload): Promise<void
     db.messageLogs,
     db.messagingConfigs,
     db.auditLogs,
+    db.kvMeta,
   ];
 
   await runSafeDbWrite(() =>
@@ -369,8 +441,67 @@ export async function restoreBackupPayload(payload: BackupPayload): Promise<void
       if (normalized.data.messagingConfigs.length)
         await db.messagingConfigs.bulkPut(normalized.data.messagingConfigs as never[]);
       if (normalized.data.auditLogs.length) await db.auditLogs.bulkPut(normalized.data.auditLogs as never[]);
+      if (normalized.data.sequences?.length) {
+        await db.kvMeta.bulkPut(normalized.data.sequences);
+      }
     })
   );
 
   await setMeta('activeOrgId', targetOrgId);
+}
+
+export async function restoreBackupWithSafetyNet(params: {
+  rawText: string;
+  password?: string;
+  currentOrgId: string;
+  allowCrossOrgRestore: boolean;
+  expectedFileSha256?: string;
+}): Promise<{
+  payload: BackupPayload;
+  isCrossOrg: boolean;
+  safetyBackupRecord?: BackupRecord;
+  integrityCheckedCustomers: number;
+  integrityRepairedCount: number;
+}> {
+  // 1. Validate, decrypt, verify SHA-256 & org check BEFORE modifying any local data
+  const verified = await parseAndVerifyBackupFile({
+    rawText: params.rawText,
+    password: params.password,
+    currentOrgId: params.currentOrgId,
+    allowCrossOrgRestore: params.allowCrossOrgRestore,
+    expectedFileSha256: params.expectedFileSha256,
+  });
+
+  // 2. Create pre-restore safety backup of current org if present
+  let safetyBackupRecord: BackupRecord | undefined;
+  if (params.currentOrgId) {
+    const existingOrg = await db.organizations.get(params.currentOrgId);
+    if (existingOrg) {
+      const safety = await createOrganizationBackup({
+        orgId: params.currentOrgId,
+        password: params.password,
+        storageType: 'local_file',
+        backupKind: 'pre_maintenance',
+      });
+      safetyBackupRecord = safety.record;
+    }
+  }
+
+  // 3. Atomic restore
+  await restoreBackupPayload(verified.payload);
+
+  // 4. Verify & reconcile balances and ledger integrity immediately after restore
+  const restoredOrg = await db.organizations.get(verified.payload.orgId);
+  const integrity = await verifyAndRepairLedgerIntegrity(
+    verified.payload.orgId,
+    restoredOrg?.currencyDecimals ?? 0
+  );
+
+  return {
+    payload: verified.payload,
+    isCrossOrg: verified.isCrossOrg,
+    safetyBackupRecord,
+    integrityCheckedCustomers: integrity.checkedCustomers,
+    integrityRepairedCount: integrity.repairedCount,
+  };
 }

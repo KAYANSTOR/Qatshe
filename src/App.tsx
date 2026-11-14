@@ -20,6 +20,7 @@ import {
 } from './views/MessagingOffersViews';
 import { PinLockView, SetupWizardView, SplashScreen } from './views/OnboardingViews';
 import { DailySalesView, NewSaleView, SaleDetailView } from './views/SalesViews';
+import { GoogleDriveBackupView } from './views/GoogleDriveBackupView';
 import {
   BackupView,
   MaintenanceView,
@@ -92,6 +93,8 @@ const ScreenRouter: React.FC = () => {
       return <SettingsView />;
     case 'backup':
       return <BackupView />;
+    case 'google_drive_backup':
+      return <GoogleDriveBackupView />;
     case 'maintenance':
       return <MaintenanceView />;
     case 'sync':

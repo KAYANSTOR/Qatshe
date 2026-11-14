@@ -14,6 +14,7 @@ export const NotificationsSheet: React.FC<{
     messageLogs,
     syncOps,
     cashboxSessions,
+    driveBackupState,
     navigate,
   } = useQatshi();
 
@@ -78,6 +79,25 @@ export const NotificationsSheet: React.FC<{
       onClick: () => {
         onClose();
         navigate('sync');
+      },
+    });
+  }
+
+  if (driveBackupState?.linkedAccount && (driveBackupState.status === 'pending_offline' || driveBackupState.status === 'needs_auth')) {
+    items.push({
+      id: 'drive-backup-pending',
+      title:
+        driveBackupState.status === 'needs_auth'
+          ? 'النسخ السحابي في Google Drive بانتظار تأكيد الحساب'
+          : 'نسخة Google Drive الاحتياطية معلقة لعدم توفر الإنترنت',
+      desc:
+        driveBackupState.pendingReason ||
+        'سيتم استئناف النسخ اليومي المشفر تلقائياً فور توفر الاتصال وتأكيد الجلسة.',
+      tone: 'warning',
+      icon: <Cloud className="h-4 w-4" />,
+      onClick: () => {
+        onClose();
+        navigate('google_drive_backup');
       },
     });
   }

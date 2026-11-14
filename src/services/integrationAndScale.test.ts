@@ -23,6 +23,7 @@ import {
   verifyAndRepairLedgerIntegrity,
 } from './accountingService';
 import {
+  CURRENT_BACKUP_SCHEMA_VERSION,
   createOrganizationBackup,
   migrateBackupPayload,
   parseAndVerifyBackupFile,
@@ -515,7 +516,7 @@ test('Integration 2: Encrypted & unencrypted backup/restore, checksum tamper det
   v1Raw.schemaVersion = 1;
   delete (v1Raw.data.organization as { orgAuthSecret?: string }).orgAuthSecret;
   const migrated = migrateBackupPayload(v1Raw);
-  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.schemaVersion, CURRENT_BACKUP_SCHEMA_VERSION);
   assert.ok((migrated.data.organization as Organization).orgAuthSecret);
 });
 

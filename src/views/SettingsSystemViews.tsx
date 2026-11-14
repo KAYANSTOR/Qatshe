@@ -4,6 +4,7 @@ import {
   Building2,
   CheckCircle2,
   ChevronLeft,
+  Cloud,
   CloudUpload,
   CreditCard,
   Download,
@@ -788,6 +789,13 @@ export const SettingsView: React.FC = () => {
         iconBg: 'bg-[#E9F3EF] text-[#1A5D4A] dark:bg-[#16342B] dark:text-[#84CEB9]',
       },
       {
+        id: 'google_drive_backup',
+        label: 'النسخ الاحتياطي إلى Google Drive',
+        subtitle: 'ربط حساب Google والنسخ التلقائي اليومي المشفر',
+        icon: <Cloud className="h-4 w-4" />,
+        iconBg: 'bg-[#E8F1EB] text-[#1E4230] dark:bg-[#193325] dark:text-[#86C89B]',
+      },
+      {
         id: 'backup',
         label: 'النسخ الاحتياطي المشفر',
         subtitle: 'حفظ نسخة محلية أو سحابية واستعادتها',
@@ -1171,6 +1179,25 @@ export const BackupView: React.FC = () => {
         icon={<HardDriveDownload className="h-5 w-5" />}
         backAction={() => navigate('settings')}
       />
+
+      <button
+        type="button"
+        onClick={() => navigate('google_drive_backup')}
+        className="w-full p-3.5 rounded-[18px] bg-gradient-to-l from-[#183526] to-[#234A36] text-white flex items-center justify-between gap-3 text-right shadow-sm active:scale-[0.99] transition-transform"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="h-10 w-10 rounded-[13px] bg-white/15 flex items-center justify-center shrink-0">
+            <Cloud className="h-5 w-5 text-[#F5D68E]" />
+          </span>
+          <div className="min-w-0">
+            <div className="font-display text-sm font-extrabold">النسخ الاحتياطي إلى Google Drive</div>
+            <div className="text-[11px] text-[#C8DACD] truncate">
+              ربط حسابك الشخصي للنسخ اليومي التلقائي والاستعادة عند تغيير الهاتف
+            </div>
+          </div>
+        </div>
+        <ChevronLeft className="h-4 w-4 shrink-0 text-white/80" />
+      </button>
 
       <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-[#EFECE3] dark:bg-[#0B1610] border border-[#E2DDD0] dark:border-[#243B2E]">
         {tabs.map((t) => (

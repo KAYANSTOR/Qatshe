@@ -227,6 +227,24 @@ export const SetupWizardView: React.FC = () => {
           </PrimaryButton>
         </form>
       </SurfaceCard>
+
+      <SurfaceCard className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-sm font-extrabold text-[#16281E] dark:text-[#EEF2EC]">
+            هل تغيّر هاتفك أو لديك نسخة سابقة؟
+          </div>
+          <p className="text-[11px] text-[#657369] dark:text-[#98A89C] mt-0.5">
+            اربط حساب Google نفسه لاستعادة جميع العملاء والمبيعات والديون فوراً.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('google_drive_backup')}
+          className="min-h-[42px] px-3.5 rounded-[14px] bg-[#E8EFE9] dark:bg-[#193325] text-[#1E4230] dark:text-[#86C89B] text-xs font-bold shrink-0"
+        >
+          استعادة من Drive
+        </button>
+      </SurfaceCard>
     </div>
   );
 };

@@ -52,7 +52,7 @@ export const PageHeader: React.FC<{
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="font-display text-lg font-extrabold text-[#16281E] dark:text-[#EEF2EC] truncate leading-snug">
+        <h1 className="font-display text-base sm:text-lg font-extrabold text-[#16281E] dark:text-[#EEF2EC] line-clamp-2 leading-snug">
           {title}
         </h1>
         {subtitle && (

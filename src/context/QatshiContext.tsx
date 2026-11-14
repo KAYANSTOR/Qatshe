@@ -8,6 +8,7 @@ import type {
   Campaign,
   CashboxSession,
   Customer,
+  DriveBackupState,
   Expense,
   LedgerEntry,
   MessageLog,
@@ -20,6 +21,8 @@ import type {
   SyncOperation,
 } from '../domain/types';
 import { getMeta, requestAndCheckPersistentStorage, setMeta } from '../services/device';
+import { initGoogleDriveAuth } from '../services/googleAuthService';
+import { getDriveBackupState, runDriveBackupCatchUp } from '../services/googleDriveBackupScheduler';
 import { subscribeSmsDeliveryUpdates } from '../services/nativeSmsBridge';
 import { confirmManualSmsOutcome, getOrCreateMessagingConfig } from '../services/messagingService';
 import { resolveInitialOrganizationId } from '../services/seedService';
@@ -63,6 +66,7 @@ interface QatshiContextValue {
   syncOps: SyncOperation[];
   auditLogs: AuditLog[];
   backupRecords: BackupRecord[];
+  driveBackupState: DriveBackupState | null;
   orgCounts: OrgCounts;
   totalReceivables: number;
   debtorsCount: number;
@@ -73,6 +77,7 @@ interface QatshiContextValue {
   toast: { type: 'success' | 'error' | 'info'; message: string } | null;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   refreshData: () => Promise<void>;
+  refreshDriveBackupState: () => Promise<void>;
   switchOrganization: (orgId: string) => Promise<void>;
   switchUser: (user: AppUser) => Promise<void>;
 }
@@ -104,6 +109,7 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [syncOps, setSyncOps] = useState<SyncOperation[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [backupRecords, setBackupRecords] = useState<BackupRecord[]>([]);
+  const [driveBackupState, setDriveBackupState] = useState<DriveBackupState | null>(null);
   const [orgCounts, setOrgCounts] = useState<OrgCounts>({
     customers: 0,
     sales: 0,
@@ -244,6 +250,7 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSyncOps(orgSync);
     setAuditLogs(orgAudit);
     setBackupRecords(orgBackups.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    getDriveBackupState(targetOrgId).then(setDriveBackupState).catch(() => {});
     setOrgCounts({
       customers: custCount,
       sales: salesCount,
@@ -263,6 +270,14 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await setMeta('activeUserId', matchedUser.id);
     }
   }, []);
+
+  const refreshDriveBackupState = useCallback(async () => {
+    const activeOrgId = (await getMeta('activeOrgId')) || org?.id;
+    if (activeOrgId) {
+      const st = await getDriveBackupState(activeOrgId);
+      setDriveBackupState(st);
+    }
+  }, [org?.id]);
 
   const refreshData = useCallback(async () => {
     const activeOrgId = (await getMeta('activeOrgId')) || org?.id;
@@ -362,6 +377,44 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, [refreshData]);
 
+  useEffect(() => {
+    return initGoogleDriveAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!org?.id || loading || isLocked) return;
+    const orgId = org.id;
+
+    const triggerCatchUp = (trigger: 'app_resume' | 'online_catchup' | 'daily_auto') => {
+      runDriveBackupCatchUp({ orgId, trigger })
+        .then((res) => {
+          setDriveBackupState(res.state);
+          if (res.executed && res.outcome === 'success') {
+            refreshData().catch(() => {});
+          }
+        })
+        .catch(() => {});
+    };
+
+    triggerCatchUp('app_resume');
+
+    const onOnline = () => triggerCatchUp('online_catchup');
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        triggerCatchUp('app_resume');
+      }
+    };
+    const interval = window.setInterval(() => triggerCatchUp('daily_auto'), 15 * 60 * 1000);
+
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [org?.id, loading, isLocked, refreshData]);
+
   return (
     <QatshiContext.Provider
       value={{
@@ -387,6 +440,7 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         syncOps,
         auditLogs,
         backupRecords,
+        driveBackupState,
         orgCounts,
         totalReceivables,
         debtorsCount,
@@ -397,6 +451,7 @@ export const QatshiProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         toast,
         showToast,
         refreshData,
+        refreshDriveBackupState,
         switchOrganization,
         switchUser,
       }}

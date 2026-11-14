@@ -60,6 +60,7 @@ export type AppScreen =
   | 'org_profile'
   | 'settings'
   | 'backup'
+  | 'google_drive_backup'
   | 'maintenance'
   | 'sync'
   | 'subscription'
@@ -403,7 +404,94 @@ export interface BackupRecord {
   sizeBytes: number;
   encrypted: boolean;
   checksum: string;
-  storageType: 'local_file' | 'cloud_optional';
+  sha256?: string;
+  remoteFileId?: string;
+  remoteAccountEmail?: string;
+  backupKind?: 'daily' | 'monthly' | 'manual' | 'pre_maintenance';
+  storageType: 'local_file' | 'cloud_optional' | 'google_drive';
+}
+
+export interface GoogleDriveAccountLink {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  connectedAt: string;
+}
+
+export interface DriveRetentionPolicy {
+  dailyEnabled: boolean;
+  preferredHour: number;
+  retainDailyCount: number;
+  retainMonthlyCount: number;
+  keepManualCount: number;
+}
+
+export type DriveBackupSyncStatus =
+  | 'disconnected'
+  | 'idle'
+  | 'running'
+  | 'pending_offline'
+  | 'needs_auth'
+  | 'error';
+
+export type DriveBackupOutcome =
+  | 'success'
+  | 'skipped_duplicate'
+  | 'deferred_offline'
+  | 'needs_auth'
+  | 'failed';
+
+export interface DriveBackupAttemptLog {
+  id: string;
+  at: string;
+  trigger: 'manual' | 'daily_auto' | 'online_catchup' | 'app_resume' | 'pre_maintenance' | 'native_workmanager';
+  outcome: DriveBackupOutcome;
+  backupKind?: 'daily' | 'monthly' | 'manual' | 'pre_maintenance';
+  fileName?: string;
+  remoteFileId?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  message: string;
+}
+
+export interface DriveBackupState {
+  orgId: string;
+  linkedAccount: GoogleDriveAccountLink | null;
+  retention: DriveRetentionPolicy;
+  passphraseConfigured: boolean;
+  status: DriveBackupSyncStatus;
+  pendingReason?: string;
+  pendingSince?: string;
+  lastSuccessfulBackupAt?: string;
+  lastSuccessfulDateKey?: string;
+  lastSuccessfulSizeBytes?: number;
+  lastSuccessfulSha256?: string;
+  lastUploadedDataChecksum?: string;
+  lastAttemptAt?: string;
+  lastAttemptOutcome?: DriveBackupOutcome;
+  lastErrorMessage?: string;
+  nextScheduledAt?: string;
+  remoteBackupCount?: number;
+  prunedCount?: number;
+  lastNativeTriggerAt?: string;
+  history: DriveBackupAttemptLog[];
+}
+
+export interface RemoteDriveBackupFile {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  createdTime: string;
+  orgId: string;
+  orgName: string;
+  backupKind: 'daily' | 'monthly' | 'manual' | 'pre_maintenance';
+  dateKey: string;
+  sha256: string;
+  dataChecksum: string;
+  recordCount: number;
+  schemaVersion: number;
+  encrypted: boolean;
 }
 
 export type Permission =

@@ -34,13 +34,14 @@ const SCREEN_PERMISSION_MAP: Partial<Record<AppScreen, Permission>> = {
   users: 'manage_users',
   org_profile: 'manage_org',
   backup: 'manage_backup',
+  google_drive_backup: 'manage_backup',
   maintenance: 'manage_backup',
   sync: 'manage_sync',
   subscription: 'manage_org',
 };
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { screen, navigate, activeUser, toast } = useQatshi();
+  const { screen, navigate, org, activeUser, toast } = useQatshi();
   const {
     isInstallable,
     isIOS,
@@ -77,9 +78,11 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }, [openInstallSheet]);
 
   const requiredPerm = SCREEN_PERMISSION_MAP[screen];
-  const authorized = !requiredPerm || hasPermission(activeUser?.role, requiredPerm);
+  const isFreshDeviceDriveRecovery = screen === 'google_drive_backup' && !org;
+  const authorized = isFreshDeviceDriveRecovery || !requiredPerm || hasPermission(activeUser?.role, requiredPerm);
 
-  const isAuthOrOnboarding = screen === 'splash' || screen === 'setup' || screen === 'login';
+  const isAuthOrOnboarding =
+    screen === 'splash' || screen === 'setup' || screen === 'login' || isFreshDeviceDriveRecovery;
 
   const isHomeTab = screen === 'dashboard';
   const isAccountsTab =
