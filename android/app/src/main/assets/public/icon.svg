@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0F1F17"/>
+  <polygon points="256,56 398,114 456,256 398,398 256,456 114,398 56,256 114,114" fill="none" stroke="#C7CBB8" stroke-width="14"/>
+  <polygon points="256,82 380,132 430,256 380,380 256,430 132,380 82,256 132,132" fill="none" stroke="#6B7F67" stroke-width="6"/>
+  <path d="M256 132 C226 172 226 210 256 238 C286 210 286 172 256 132 Z" fill="none" stroke="#C7CBB8" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M256 226 C210 202 162 212 146 254 C186 276 230 264 256 226 Z" fill="none" stroke="#6B7F67" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M256 226 C302 202 350 212 366 254 C326 276 282 264 256 226 Z" fill="none" stroke="#6B7F67" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M256 284 C202 262 148 278 134 326 C182 346 228 330 256 284 Z" fill="none" stroke="#C7CBB8" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M256 284 C310 262 364 278 378 326 C330 346 284 330 256 284 Z" fill="none" stroke="#C7CBB8" stroke-width="12" stroke-linejoin="round"/>
+  <line x1="256" y1="168" x2="256" y2="392" stroke="#C7CBB8" stroke-width="14" stroke-linecap="round"/>
+</svg>

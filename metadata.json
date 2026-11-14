@@ -1,0 +1,8 @@
+{
+  "name": "QATSHI | قاتشي",
+  "description": "نظام ذكي متكامل لإدارة محلات القات وحسابات العملاء والمديونيات والمبيعات والصندوق وكشوفات الحساب والرسائل بنظام العمل دون إنترنت Offline-First PWA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

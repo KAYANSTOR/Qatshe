@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">QATSHI | قاتشي</string>
+    <string name="title_activity_main">QATSHI | قاتشي</string>
+    <string name="package_name">com.qatshi.pos</string>
+    <string name="custom_url_scheme">com.qatshi.pos</string>
+</resources>

@@ -1,0 +1,102 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-display: 'Readex Pro', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    --font-sans: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+
+    /* QATSHI Material Design 3 Brand Palette */
+    --qatshi-primary-dark: #0F1F17;
+    --qatshi-deep-green: #1E3A2E;
+    --qatshi-natural-green: #3E5A3F;
+    --qatshi-calm-green: #6B7F67;
+    --qatshi-light-neutral: #C7CBB8;
+    --qatshi-olive-gray: #3D4337;
+
+    /* Safe Area Insets (Android Edge-to-Edge / Notch / Gesture Bar) */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+
+  body {
+    touch-action: manipulation;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pb-safe {
+    padding-bottom: max(0.5rem, var(--safe-bottom));
+  }
+
+  .pt-safe {
+    padding-top: var(--safe-top);
+  }
+}
+
+@keyframes qatshiSheetUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes qatshiFadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: qatshiSheetUp 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.animate-view-in {
+  animation: qatshiFadeSlide 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet-up,
+  .animate-view-in {
+    animation: none;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #0F1F17 !important;
+  }
+}
