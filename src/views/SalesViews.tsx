@@ -7,9 +7,11 @@ import {
   Minus,
   Plus,
   Printer,
+  ReceiptText,
   RotateCcw,
   Search,
   Share2,
+  ShoppingBag,
   Trash2,
   UserCheck,
 } from 'lucide-react';
@@ -68,6 +70,7 @@ export const DailySalesView: React.FC = () => {
       <PageHeader
         title="المبيعات"
         subtitle={`${activeSales.length} فاتورة · الإجمالي ${fmt(totalAmount)}`}
+        icon={<ShoppingBag className="h-5 w-5" />}
         action={
           <PrimaryButton onClick={() => navigate('new_sale')}>
             <Plus className="h-4 w-4" />
@@ -76,14 +79,14 @@ export const DailySalesView: React.FC = () => {
         }
       />
 
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+      <div className="grid grid-cols-3 gap-2">
         <KpiMetric label="إجمالي المبيعات" value={fmt(totalAmount)} />
         <KpiMetric label="المحصل نقداً" value={fmt(totalCash)} tone="positive" />
         <KpiMetric label="المتبقي آجل" value={fmt(totalCredit)} tone="warning" />
       </div>
 
-      <SurfaceCard className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+      <SurfaceCard className="space-y-3">
+        <div className="space-y-2.5">
           <div className="relative">
             <Search className="h-4 w-4 text-[#6B7F67] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
@@ -92,27 +95,29 @@ export const DailySalesView: React.FC = () => {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="بحث برقم الفاتورة أو العميل..."
               aria-label="بحث في المبيعات"
-              className="w-full min-h-[46px] pr-10 pl-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
+              className="w-full min-h-[46px] pr-10 pl-3 rounded-2xl border border-[#D8D3C6] dark:border-[#2C4235] bg-[#FAF8F3] dark:bg-[#0B1610] text-sm"
             />
           </div>
-          <select
-            value={modeFilter}
-            onChange={(e) => setModeFilter(e.target.value as typeof modeFilter)}
-            aria-label="تصفية حسب نوع البيع"
-            className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
-          >
-            <option value="all">جميع أنواع البيع</option>
-            <option value="cash">بيع نقدي</option>
-            <option value="credit">بيع آجل</option>
-            <option value="partial">بيع جزئي</option>
-          </select>
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            aria-label="تصفية بالتاريخ"
-            className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm font-mono"
-          />
+          <div className="grid grid-cols-2 gap-2.5">
+            <select
+              value={modeFilter}
+              onChange={(e) => setModeFilter(e.target.value as typeof modeFilter)}
+              aria-label="تصفية حسب نوع البيع"
+              className="w-full min-h-[46px] px-3 rounded-2xl border border-[#D8D3C6] dark:border-[#2C4235] bg-[#FAF8F3] dark:bg-[#0B1610] text-sm"
+            >
+              <option value="all">جميع أنواع البيع</option>
+              <option value="cash">بيع نقدي</option>
+              <option value="credit">بيع آجل</option>
+              <option value="partial">بيع جزئي</option>
+            </select>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              aria-label="تصفية بالتاريخ"
+              className="w-full min-h-[46px] px-3 rounded-2xl border border-[#D8D3C6] dark:border-[#2C4235] bg-[#FAF8F3] dark:bg-[#0B1610] text-sm font-mono"
+            />
+          </div>
         </div>
 
         {filtered.length === 0 ? (
@@ -351,10 +356,11 @@ export const NewSaleView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title="تسجيل عملية بيع"
         subtitle={savedSale ? formatCommercialRef(savedSale.invoiceNumber, 'sale') : 'خطوات واضحة وسريعة'}
+        icon={<Plus className="h-5 w-5" />}
         backAction={() => (step > 1 && step < 5 ? setStep((s) => (s - 1) as 1 | 2 | 3 | 4) : navigate('sales'))}
       />
 
@@ -790,7 +796,7 @@ export const NewSaleView: React.FC = () => {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2">
+          <div className="grid grid-cols-2 gap-2.5 pt-2">
             <KpiMetric label="الإجمالي" value={fmt(total)} />
             <KpiMetric label="الخصم" value={fmt(discNum)} />
             <KpiMetric label="المدفوع الآن" value={fmt(effectivePaid)} tone="positive" />
@@ -932,54 +938,54 @@ export const SaleDetailView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title={displayNumber}
         subtitle={`${sale.customerName} · ${formatDateArabic(sale.createdAt, org.dateFormat, true)}`}
+        icon={<ReceiptText className="h-5 w-5" />}
         backAction={() => navigate('sales')}
-        action={
-          <div className="flex flex-wrap gap-2 no-print">
-            <PrimaryButton variant="secondary" onClick={() => window.print()}>
-              <Printer className="h-4 w-4" />
-              طباعة
-            </PrimaryButton>
-            <PrimaryButton variant="secondary" onClick={() => handleDownloadPdf(true)}>
-              <Share2 className="h-4 w-4" />
-              مشاركة PDF
-            </PrimaryButton>
-            <PrimaryButton onClick={() => handleDownloadPdf(false)}>
-              <Download className="h-4 w-4" />
-              تنزيل PDF
-            </PrimaryButton>
-          </div>
-        }
       />
 
+      <div className="grid grid-cols-3 gap-2 no-print">
+        <PrimaryButton variant="secondary" onClick={() => window.print()}>
+          <Printer className="h-4 w-4" />
+          طباعة
+        </PrimaryButton>
+        <PrimaryButton variant="secondary" onClick={() => handleDownloadPdf(true)}>
+          <Share2 className="h-4 w-4" />
+          مشاركة
+        </PrimaryButton>
+        <PrimaryButton onClick={() => handleDownloadPdf(false)}>
+          <Download className="h-4 w-4" />
+          PDF
+        </PrimaryButton>
+      </div>
+
       <SurfaceCard className="space-y-5">
-        <div className="flex flex-wrap justify-between gap-4 pb-4 border-b border-[#C7CBB8]/60 dark:border-[#243B2E]">
+        <div className="flex flex-wrap justify-between gap-4 pb-4 border-b border-[#ECE7DA] dark:border-[#21362A]">
           <div>
-            <div className="text-xs text-[#6B7F67]">المحل</div>
+            <div className="text-xs text-[#657369]">المحل</div>
             <div className="font-display font-bold">{org.name}</div>
-            <div className="text-xs text-[#6B7F67]">الموظف: {sale.createdByName}</div>
+            <div className="text-xs text-[#657369]">الموظف: {sale.createdByName}</div>
           </div>
           <div className="text-left">
-            <div className="text-xs text-[#6B7F67]">الحالة</div>
-            <div className={`font-bold text-sm ${sale.status === 'reversed' ? 'text-red-600' : 'text-[#1E3A2E] dark:text-[#8FB98D]'}`}>
+            <div className="text-xs text-[#657369]">الحالة</div>
+            <div className={`font-bold text-sm ${sale.status === 'reversed' ? 'text-red-600' : 'text-[#1E5638] dark:text-[#86C89B]'}`}>
               {sale.status === 'reversed' ? 'ملغاة بقيد عكسي' : 'معتمدة محاسبياً'}
             </div>
           </div>
         </div>
 
-        {/* Mobile Cards + Desktop Clean Table */}
-        <div className="space-y-2.5 sm:hidden">
+        {/* Always show compact mobile item cards inside 480px shell; wide table only for print */}
+        <div className="space-y-2.5 print:hidden">
           {sale.items.map((item, i) => (
             <div
               key={i}
-              className="p-3 rounded-2xl bg-[#F9FAF7] dark:bg-[#0B1610] border border-[#C7CBB8]/45 dark:border-[#243B2E] flex items-center justify-between gap-3"
+              className="p-3 rounded-2xl bg-[#FAF8F3] dark:bg-[#0B1610] border border-[#E6E1D5] dark:border-[#243B2E] flex items-center justify-between gap-3"
             >
               <div>
                 <div className="font-medium text-sm">{item.productName}</div>
-                <div className="text-xs text-[#6B7F67]">
+                <div className="text-xs text-[#657369]">
                   {item.grade} · {item.quantity} {item.unitName} × {fmt(item.unitPrice)}
                 </div>
               </div>
@@ -988,7 +994,7 @@ export const SaleDetailView: React.FC = () => {
           ))}
         </div>
 
-        <div className="hidden sm:block overflow-x-auto">
+        <div className="hidden print:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#C7CBB8]/60 dark:border-[#243B2E] text-xs text-[#6B7F67]">
@@ -1013,7 +1019,7 @@ export const SaleDetailView: React.FC = () => {
           </table>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-[#C7CBB8]/60 dark:border-[#243B2E]">
+        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-[#ECE7DA] dark:border-[#21362A]">
           <KpiMetric label="المجموع الفرعي" value={fmt(sale.subtotal)} />
           <KpiMetric label="الخصم" value={fmt(sale.discount)} />
           <KpiMetric label="المدفوع" value={fmt(sale.paidAmount)} tone="positive" />

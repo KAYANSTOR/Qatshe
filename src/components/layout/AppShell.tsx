@@ -2,95 +2,23 @@ import React, { useEffect, useState } from 'react';
 import {
   Banknote,
   BarChart3,
-  Building2,
-  Cloud,
-  Database,
-  Download,
-  FileSpreadsheet,
-  HelpCircle,
   Home,
-  Layers,
-  Lock,
-  Menu,
   MessageSquare,
-  Moon,
-  Package,
   Plus,
   Receipt,
   Settings,
-  Shield,
-  Smartphone,
-  Sun,
+  ShoppingBag,
   UserPlus,
   Users,
   Wallet,
-  Wifi,
-  WifiOff,
 } from 'lucide-react';
 import { useQatshi } from '../../context/QatshiContext';
 import { hasPermission, type AppScreen, type Permission } from '../../domain/types';
-import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { BulkMessagingSheet } from '../messaging/BulkMessagingSheet';
 import { InstallPromptSheet } from '../pwa/InstallPromptSheet';
-import { BottomSheet, BrandLogo, EmptyState, PrimaryButton } from '../ui/LuxuryUI';
-
-interface NavItem {
-  screen: AppScreen;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  requiredPermission?: Permission;
-}
-
-const NAV_GROUPS: Array<{ title: string; items: NavItem[] }> = [
-  {
-    title: 'العمليات اليومية',
-    items: [
-      { screen: 'dashboard', label: 'الرئيسية', icon: Home },
-      { screen: 'new_sale', label: 'بيع جديد', icon: Plus, requiredPermission: 'create_sale' },
-      { screen: 'sales', label: 'سجل المبيعات', icon: Receipt },
-      { screen: 'collection', label: 'تسجيل سداد', icon: Banknote, requiredPermission: 'create_payment' },
-      { screen: 'debts', label: 'الديون والتحصيل', icon: Layers },
-    ],
-  },
-  {
-    title: 'العملاء والكشوفات',
-    items: [
-      { screen: 'customers', label: 'العملاء', icon: Users },
-      { screen: 'customer_statement', label: 'كشف حساب', icon: FileSpreadsheet },
-      { screen: 'products', label: 'الأصناف والأسعار', icon: Package, requiredPermission: 'manage_products' },
-    ],
-  },
-  {
-    title: 'المالية والتقارير',
-    items: [
-      { screen: 'cashbox', label: 'الصندوق اليومي', icon: Wallet, requiredPermission: 'manage_cashbox' },
-      { screen: 'expenses', label: 'المصروفات', icon: Banknote, requiredPermission: 'manage_expenses' },
-      { screen: 'reports', label: 'التقارير', icon: BarChart3, requiredPermission: 'view_reports' },
-    ],
-  },
-  {
-    title: 'الرسائل النصية',
-    items: [
-      { screen: 'messaging', label: 'الرسائل النصية', icon: MessageSquare, requiredPermission: 'manage_messaging' },
-      { screen: 'templates', label: 'قوالب الرسائل', icon: MessageSquare, requiredPermission: 'manage_messaging' },
-      { screen: 'message_log', label: 'سجل الرسائل', icon: Receipt, requiredPermission: 'manage_messaging' },
-      { screen: 'sms_settings', label: 'إعدادات الشريحة', icon: Smartphone, requiredPermission: 'manage_messaging' },
-    ],
-  },
-  {
-    title: 'الإدارة والنظام',
-    items: [
-      { screen: 'users', label: 'الموظفون', icon: Shield, requiredPermission: 'manage_users' },
-      { screen: 'org_profile', label: 'ملف المؤسسة', icon: Building2, requiredPermission: 'manage_org' },
-      { screen: 'backup', label: 'النسخ الاحتياطي', icon: Database, requiredPermission: 'manage_backup' },
-      { screen: 'sync', label: 'المزامنة', icon: Cloud, requiredPermission: 'manage_sync' },
-      { screen: 'maintenance', label: 'سلامة البيانات', icon: Settings, requiredPermission: 'manage_backup' },
-      { screen: 'subscription', label: 'المؤسسات والباقة', icon: Building2, requiredPermission: 'manage_org' },
-      { screen: 'settings', label: 'الإعدادات', icon: Settings },
-      { screen: 'support', label: 'المساعدة', icon: HelpCircle },
-    ],
-  },
-];
+import { BottomSheet, EmptyState } from '../ui/LuxuryUI';
+import { NotificationsSheet } from './NotificationsSheet';
 
 const SCREEN_PERMISSION_MAP: Partial<Record<AppScreen, Permission>> = {
   new_sale: 'create_sale',
@@ -112,229 +40,150 @@ const SCREEN_PERMISSION_MAP: Partial<Record<AppScreen, Permission>> = {
 };
 
 export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const {
-    screen,
-    navigate,
-    org,
-    activeUser,
-    syncOps,
-    darkMode,
-    toggleDarkMode,
-    toast,
-    setLocked,
-  } = useQatshi();
-  const isOnline = useOnlineStatus();
+  const { screen, navigate, activeUser, toast } = useQatshi();
   const {
     isInstallable,
-    isInstalled,
     isIOS,
     shouldShowSheet,
     install,
     dismissFirstVisitPrompt,
-    openInstallSheet,
     closeInstallSheet,
+    openInstallSheet,
   } = usePWAInstall();
-  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [bulkSheetOpen, setBulkSheetOpen] = useState(false);
+  const [bulkCustomerId, setBulkCustomerId] = useState<string | undefined>(undefined);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
-    const handler = () => openInstallSheet();
-    window.addEventListener('qatshi:open-install-sheet', handler);
-    return () => window.removeEventListener('qatshi:open-install-sheet', handler);
+    const onInstall = () => openInstallSheet();
+    const onBulk = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ customerId?: string }>).detail;
+      setBulkCustomerId(detail?.customerId);
+      setQuickActionsOpen(false);
+      setBulkSheetOpen(true);
+    };
+    const onNotif = () => setNotificationsOpen(true);
+
+    window.addEventListener('qatshi:open-install-sheet', onInstall);
+    window.addEventListener('qatshi:open-bulk-sms', onBulk);
+    window.addEventListener('qatshi:open-notifications', onNotif);
+    return () => {
+      window.removeEventListener('qatshi:open-install-sheet', onInstall);
+      window.removeEventListener('qatshi:open-bulk-sms', onBulk);
+      window.removeEventListener('qatshi:open-notifications', onNotif);
+    };
   }, [openInstallSheet]);
 
-  const pendingSyncCount = syncOps.filter((s) => s.status === 'pending').length;
   const requiredPerm = SCREEN_PERMISSION_MAP[screen];
   const authorized = !requiredPerm || hasPermission(activeUser?.role, requiredPerm);
 
-  const handleNav = (target: AppScreen) => {
-    setMoreSheetOpen(false);
-    navigate(target);
-  };
+  const isAuthOrOnboarding = screen === 'splash' || screen === 'setup' || screen === 'login';
 
-  if (screen === 'splash' || screen === 'setup' || screen === 'login') {
-    return (
-      <div className="min-h-screen bg-[#F4F5F0] dark:bg-[#0B1610] text-[#0F1F17] dark:text-[#E8EAE0] pt-safe pb-safe">
-        <main className="p-4 sm:p-6">{children}</main>
-        {toast && (
-          <div
-            role="status"
-            className={`fixed top-[calc(16px+var(--safe-top))] left-4 right-4 sm:right-auto sm:w-auto sm:min-w-[300px] z-[60] px-4 py-3 rounded-2xl text-sm font-medium shadow-xl ${
-              toast.type === 'error'
-                ? 'bg-red-700 text-white'
-                : toast.type === 'info'
-                ? 'bg-[#3D4337] text-white'
-                : 'bg-[#0F1F17] text-white'
-            }`}
-          >
-            {toast.message}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  const isSalesTab = screen === 'sales' || screen === 'new_sale' || screen === 'sale_detail';
-  const isCustomersTab =
+  const isHomeTab = screen === 'dashboard';
+  const isAccountsTab =
     screen === 'customers' ||
     screen === 'customer_form' ||
     screen === 'customer_profile' ||
-    screen === 'customer_statement';
-  const isDebtsTab = screen === 'debts' || screen === 'collection' || screen === 'receipt';
+    screen === 'customer_statement' ||
+    screen === 'debts' ||
+    screen === 'collection' ||
+    screen === 'receipt';
+  const isReportsTab = screen === 'reports' || screen === 'cashbox' || screen === 'expenses';
+  const isSalesTab = screen === 'sales' || screen === 'new_sale' || screen === 'sale_detail';
 
-  // Mobile FAB contextual primary action
-  const showFab =
-    screen === 'dashboard' || screen === 'sales' || screen === 'customers' || screen === 'debts';
-  const fabConfig =
-    screen === 'customers'
-      ? {
-          label: 'عميل جديد',
-          icon: UserPlus,
-          onClick: () => navigate('customer_form'),
-        }
-      : screen === 'debts'
-      ? {
-          label: 'تسجيل سداد',
-          icon: Banknote,
-          onClick: () => navigate('collection'),
-        }
-      : {
-          label: 'بيع جديد',
-          icon: Plus,
-          onClick: () => navigate('new_sale'),
-        };
-  const FabIcon = fabConfig.icon;
+  const handleQuickNav = (target: AppScreen) => {
+    setQuickActionsOpen(false);
+    navigate(target);
+  };
+
+  const quickActions: Array<{
+    id: string;
+    title: string;
+    desc: string;
+    icon: React.ReactNode;
+    tone: string;
+    onClick: () => void;
+    permission?: Permission;
+  }> = [
+    {
+      id: 'qa-sale',
+      title: 'بيع مباشر',
+      desc: 'إصدار فاتورة نقدي أو آجل',
+      icon: <ShoppingBag className="h-5 w-5" />,
+      tone: 'bg-[#E8EFE9] text-[#1E4230] dark:bg-[#193325] dark:text-[#86C89B]',
+      onClick: () => handleQuickNav('new_sale'),
+      permission: 'create_sale',
+    },
+    {
+      id: 'qa-customer',
+      title: 'إضافة عميل',
+      desc: 'فتح حساب عميل جديد فوراً',
+      icon: <UserPlus className="h-5 w-5" />,
+      tone: 'bg-[#F5EFE3] text-[#8E621C] dark:bg-[#2F2513] dark:text-[#EBB354]',
+      onClick: () => handleQuickNav('customer_form'),
+    },
+    {
+      id: 'qa-payment',
+      title: 'سند قبض / سداد',
+      desc: 'تحصيل دفعة وتحديث الرصيد',
+      icon: <Banknote className="h-5 w-5" />,
+      tone: 'bg-[#E8EFE9] text-[#1E5638] dark:bg-[#193325] dark:text-[#86C89B]',
+      onClick: () => handleQuickNav('collection'),
+      permission: 'create_payment',
+    },
+    {
+      id: 'qa-bulk-sms',
+      title: 'رسالة جماعية',
+      desc: 'تذكير أو عرض عبر شريحة الهاتف',
+      icon: <MessageSquare className="h-5 w-5" />,
+      tone: 'bg-[#EAF0F6] text-[#244E78] dark:bg-[#16293C] dark:text-[#89BCEE]',
+      onClick: () => {
+        setQuickActionsOpen(false);
+        setBulkCustomerId(undefined);
+        setBulkSheetOpen(true);
+      },
+      permission: 'manage_messaging',
+    },
+    {
+      id: 'qa-today',
+      title: 'ملخص اليوم',
+      desc: 'مراجعة الصندوق والمبيعات',
+      icon: <Wallet className="h-5 w-5" />,
+      tone: 'bg-[#F1ECE6] text-[#5E472D] dark:bg-[#292118] dark:text-[#D5B994]',
+      onClick: () => handleQuickNav('cashbox'),
+      permission: 'manage_cashbox',
+    },
+    {
+      id: 'qa-settings',
+      title: 'الإعدادات',
+      desc: 'إدارة النظام والنسخ الاحتياطي',
+      icon: <Settings className="h-5 w-5" />,
+      tone: 'bg-[#EFECE4] text-[#3F4A42] dark:bg-[#1E2E24] dark:text-[#C5D8CA]',
+      onClick: () => handleQuickNav('settings'),
+    },
+  ];
+
+  const visibleQuickActions = quickActions.filter(
+    (item) => !item.permission || hasPermission(activeUser?.role, item.permission)
+  );
 
   return (
-    <div className="min-h-screen flex bg-[#F4F5F0] dark:bg-[#0B1610] text-[#0F1F17] dark:text-[#E8EAE0]">
-      {/* Desktop Sidebar (RTL Right) */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-[264px] shrink-0 border-l border-[#C7CBB8]/65 dark:border-[#243B2E] bg-white dark:bg-[#0F1F17] sticky top-0 h-screen overflow-y-auto no-print">
-        <div className="p-5 border-b border-[#C7CBB8]/50 dark:border-[#243B2E]">
-          <BrandLogo size="md" />
-        </div>
-
-        <nav aria-label="القائمة الرئيسية" className="flex-1 p-3 space-y-5">
-          {NAV_GROUPS.map((group) => {
-            const visibleItems = group.items.filter(
-              (item) => !item.requiredPermission || hasPermission(activeUser?.role, item.requiredPermission)
-            );
-            if (!visibleItems.length) return null;
-            return (
-              <div key={group.title} className="space-y-1">
-                <div className="px-3 text-[11px] font-semibold text-[#6B7F67]">
-                  {group.title}
-                </div>
-                {visibleItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = screen === item.screen;
-                  return (
-                    <button
-                      key={item.screen}
-                      type="button"
-                      onClick={() => handleNav(item.screen)}
-                      className={`w-full min-h-[42px] px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2.5 transition-colors text-right ${
-                        active
-                          ? 'bg-[#0F1F17] text-white dark:bg-[#3E5A3F]'
-                          : 'text-[#3D4337] dark:text-[#C7CBB8] hover:bg-[#EFF1EA] dark:hover:bg-[#1E3A2E]/60'
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-[#C7CBB8]/50 dark:border-[#243B2E] space-y-2 text-xs">
-          <div className="font-medium truncate">{org?.name}</div>
-          <div className="text-[#6B7F67] truncate">{activeUser?.name}</div>
-          <button
-            type="button"
-            onClick={() => {
-              setLocked(true);
-              navigate('login');
-            }}
-            className="w-full min-h-[40px] px-3 rounded-xl border border-[#C7CBB8] dark:border-[#2C4235] flex items-center justify-center gap-2 hover:bg-[#EFF1EA] dark:hover:bg-[#1E3A2E]"
-          >
-            <Lock className="h-3.5 w-3.5" />
-            تبديل المستخدم / قفل
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Column */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Compact Android Top App Bar */}
-        <header className="sticky top-0 z-30 pt-safe bg-white/95 dark:bg-[#0F1F17]/95 backdrop-blur-md border-b border-[#C7CBB8]/55 dark:border-[#243B2E] no-print">
-          <div className="h-14 px-4 sm:px-6 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="lg:hidden">
-                <BrandLogo size="sm" showWordmark={false} />
-              </div>
-              <div className="min-w-0">
-                <div className="font-display text-sm sm:text-base font-bold text-[#0F1F17] dark:text-[#E8EAE0] truncate">
-                  {org?.name || 'قاتشي'}
-                </div>
-                <div className="lg:hidden text-[11px] text-[#6B7F67] truncate">
-                  {activeUser?.name}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => navigate('sync')}
-                aria-label={isOnline ? 'حالة الاتصال: متصل' : 'وضع العمل دون إنترنت'}
-                className="min-h-[44px] px-2.5 rounded-2xl text-xs font-medium inline-flex items-center gap-1.5 text-[#3D4337] dark:text-[#C7CBB8] hover:bg-[#EFF1EA] dark:hover:bg-[#1E3A2E] whitespace-nowrap"
-              >
-                {isOnline ? (
-                  <Wifi className="h-4 w-4 text-[#3E5A3F] dark:text-[#8FB98D]" />
-                ) : (
-                  <WifiOff className="h-4 w-4 text-amber-600" />
-                )}
-                <span className="hidden sm:inline">
-                  {isOnline ? 'متصل' : 'دون إنترنت'}
-                  {pendingSyncCount > 0 ? ` · ${pendingSyncCount}` : ''}
-                </span>
-              </button>
-
-              {!isInstalled && (
-                <button
-                  type="button"
-                  onClick={openInstallSheet}
-                  aria-label="تثبيت التطبيق"
-                  className="min-h-[44px] px-2.5 rounded-2xl text-xs font-medium inline-flex items-center gap-1.5 bg-[#EFF1EA] dark:bg-[#1E3A2E] text-[#0F1F17] dark:text-[#E8EAE0] whitespace-nowrap"
-                >
-                  <Download className="h-4 w-4" />
-                  <span className="hidden sm:inline">تثبيت التطبيق</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={toggleDarkMode}
-                aria-label={darkMode ? 'تفعيل الوضع الفاتح' : 'تفعيل الوضع الداكن'}
-                className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-2xl hover:bg-[#EFF1EA] dark:hover:bg-[#1E3A2E]"
-              >
-                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
-
-              <div className="hidden lg:block">
-                <PrimaryButton onClick={() => navigate('new_sale')} className="min-h-[40px] py-1.5">
-                  <Plus className="h-4 w-4" />
-                  بيع جديد
-                </PrimaryButton>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Main Content Viewport */}
-        <main className="flex-1 p-4 sm:p-6 pb-28 lg:pb-8 max-w-6xl w-full mx-auto animate-view-in">
-          {authorized ? (
+    <div className="min-h-screen bg-[#EAE6DC] dark:bg-[#060D09] flex justify-center">
+      {/* Centered 480px Native Mobile App Container */}
+      <div className="w-full max-w-[480px] min-h-screen bg-[#F7F4ED] dark:bg-[#0B1510] text-[#16281E] dark:text-[#EEF2EC] sm:shadow-[0_12px_48px_rgba(15,31,23,0.12)] sm:border-x border-[#DFDAD0] dark:border-[#1E3326] relative flex flex-col overflow-x-hidden">
+        {/* Main Scrollable Viewport */}
+        <main
+          className={`flex-1 w-full animate-view-in ${
+            isAuthOrOnboarding
+              ? 'p-4 pt-safe pb-safe'
+              : screen === 'dashboard'
+              ? 'pb-28'
+              : 'px-4 pt-3 pb-28 pt-safe'
+          }`}
+        >
+          {isAuthOrOnboarding || authorized ? (
             children
           ) : (
             <EmptyState
@@ -346,174 +195,186 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           )}
         </main>
 
-        {/* Mobile Floating Action Button (FAB) */}
-        {showFab && (
-          <button
-            type="button"
-            onClick={fabConfig.onClick}
-            className="lg:hidden fixed left-4 bottom-[calc(76px+var(--safe-bottom))] z-30 h-13 px-4 rounded-2xl bg-[#0F1F17] dark:bg-[#3E5A3F] text-white shadow-lg shadow-[#0F1F17]/25 inline-flex items-center gap-2 text-sm font-medium active:scale-[0.96] transition-transform no-print"
+        {/* Fixed Bottom Navigation Bar with Integrated Center Notch & Raised Circular FAB */}
+        {!isAuthOrOnboarding && (
+          <nav
+            aria-label="شريط التنقل السفلي"
+            className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 pb-safe no-print pointer-events-none"
           >
-            <FabIcon className="h-4 w-4" />
-            <span>{fabConfig.label}</span>
-          </button>
-        )}
-
-        {/* Mobile Bottom Tab Bar — Exact 5 Tabs */}
-        <nav
-          aria-label="شريط التنقل السفلي"
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#0F1F17]/95 backdrop-blur-md border-t border-[#C7CBB8]/60 dark:border-[#243B2E] pb-safe no-print"
-        >
-          <div className="h-16 grid grid-cols-5 items-center">
-            {[
-              { id: 'dashboard' as AppScreen, label: 'الرئيسية', icon: Home, active: screen === 'dashboard' },
-              { id: 'sales' as AppScreen, label: 'المبيعات', icon: Receipt, active: isSalesTab },
-              { id: 'customers' as AppScreen, label: 'العملاء', icon: Users, active: isCustomersTab },
-              { id: 'debts' as AppScreen, label: 'الديون', icon: Layers, active: isDebtsTab },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => handleNav(tab.id)}
-                  className={`h-full flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
-                    tab.active
-                      ? 'text-[#0F1F17] dark:text-white font-bold'
-                      : 'text-[#6B7F67] dark:text-[#9AA896]'
-                  }`}
+            <div className="relative mx-auto pointer-events-auto">
+              {/* Integrated SVG Curved Notch Background */}
+              <div className="relative h-[68px] w-full flex items-stretch">
+                <svg
+                  viewBox="0 0 480 68"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                  className="absolute inset-0 w-full h-full drop-shadow-[0_-4px_14px_rgba(22,40,30,0.08)]"
                 >
-                  <span
-                    className={`px-3 py-1 rounded-full transition-colors ${
-                      tab.active ? 'bg-[#EFF1EA] dark:bg-[#1E3A2E]' : ''
+                  <path
+                    d="M0,18 Q0,0 18,0 L186,0 C200,0 206,8 214,21 C222,34 230,38 240,38 C250,38 258,34 266,21 C274,8 280,0 294,0 L462,0 Q480,0 480,18 L480,68 L0,68 Z"
+                    className="fill-white dark:fill-[#12231A]"
+                  />
+                  <path
+                    d="M0,18 Q0,0 18,0 L186,0 C200,0 206,8 214,21 C222,34 230,38 240,38 C250,38 258,34 266,21 C274,8 280,0 294,0 L462,0 Q480,0 480,18"
+                    fill="none"
+                    strokeWidth="1"
+                    className="stroke-[#E3DED2] dark:stroke-[#22382B]"
+                  />
+                </svg>
+
+                {/* Center Raised Circular FAB */}
+                <button
+                  type="button"
+                  onClick={() => setQuickActionsOpen(true)}
+                  aria-label="إجراءات سريعة"
+                  className="absolute left-1/2 -translate-x-1/2 -top-7 h-[52px] w-[52px] rounded-full bg-[#1E4230] hover:bg-[#163022] dark:bg-[#2E6046] dark:hover:bg-[#3A7557] text-white shadow-[0_8px_20px_rgba(30,66,48,0.35)] border-4 border-[#F7F4ED] dark:border-[#0B1510] inline-flex items-center justify-center active:scale-[0.94] transition-transform z-10"
+                >
+                  <Plus className="h-6 w-6" />
+                </button>
+
+                {/* 4 Equal Tabs + Center Spacer */}
+                <div className="relative z-[1] w-full grid grid-cols-5 items-center pt-1">
+                  {/* Tab 1 (Rightmost in RTL): الرئيسية */}
+                  <button
+                    type="button"
+                    onClick={() => navigate('dashboard')}
+                    className={`h-full flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition-colors ${
+                      isHomeTab
+                        ? 'text-[#1E4230] dark:text-[#86C89B]'
+                        : 'text-[#6A776E] dark:text-[#8E9F93]'
                     }`}
                   >
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+                    <Home className="h-5 w-5" />
+                    <span>الرئيسية</span>
+                  </button>
 
-            <button
-              type="button"
-              onClick={() => setMoreSheetOpen(true)}
-              className={`h-full flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors ${
-                moreSheetOpen
-                  ? 'text-[#0F1F17] dark:text-white font-bold'
-                  : 'text-[#6B7F67] dark:text-[#9AA896]'
-              }`}
-            >
-              <span
-                className={`px-3 py-1 rounded-full transition-colors ${
-                  moreSheetOpen ? 'bg-[#EFF1EA] dark:bg-[#1E3A2E]' : ''
-                }`}
-              >
-                <Menu className="h-5 w-5" />
-              </span>
-              <span>المزيد</span>
-            </button>
-          </div>
-        </nav>
-      </div>
+                  {/* Tab 2: الحسابات */}
+                  <button
+                    type="button"
+                    onClick={() => navigate('customers')}
+                    className={`h-full flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition-colors ${
+                      isAccountsTab
+                        ? 'text-[#1E4230] dark:text-[#86C89B]'
+                        : 'text-[#6A776E] dark:text-[#8E9F93]'
+                    }`}
+                  >
+                    <Users className="h-5 w-5" />
+                    <span>الحسابات</span>
+                  </button>
 
-      {/* Android Material 3 "More" Bottom Sheet Hub */}
-      <BottomSheet
-        open={moreSheetOpen}
-        onClose={() => setMoreSheetOpen(false)}
-        title="جميع خدمات قاتشي"
-        subtitle={`${org?.name || ''} · ${activeUser?.name || ''}`}
-      >
-        <div className="space-y-5">
-          {NAV_GROUPS.slice(1).map((group) => {
-            const visibleItems = group.items.filter(
-              (item) => !item.requiredPermission || hasPermission(activeUser?.role, item.requiredPermission)
-            );
-            if (!visibleItems.length) return null;
-            return (
-              <div key={group.title} className="space-y-2.5">
-                <div className="text-xs font-semibold text-[#6B7F67] dark:text-[#9AA896]">
-                  {group.title}
-                </div>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {visibleItems.map((item) => {
-                    const Icon = item.icon;
-                    const active = screen === item.screen;
-                    return (
-                      <button
-                        key={item.screen}
-                        type="button"
-                        onClick={() => handleNav(item.screen)}
-                        className={`min-h-[76px] p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1.5 text-center transition-colors active:scale-[0.97] ${
-                          active
-                            ? 'bg-[#0F1F17] text-white border-[#0F1F17] dark:bg-[#3E5A3F] dark:border-[#3E5A3F]'
-                            : 'bg-[#F9FAF7] dark:bg-[#0B1610] border-[#C7CBB8]/55 dark:border-[#243B2E] text-[#0F1F17] dark:text-[#E8EAE0]'
-                        }`}
-                      >
-                        <Icon className="h-5 w-5 shrink-0" />
-                        <span className="text-xs font-medium leading-tight">{item.label}</span>
-                      </button>
-                    );
-                  })}
+                  {/* Center Notch Label */}
+                  <div className="h-full flex flex-col items-center justify-end pb-1 pointer-events-none">
+                    <span className="text-[10px] font-bold text-[#6A776E] dark:text-[#8E9F93]">
+                      إجراء
+                    </span>
+                  </div>
+
+                  {/* Tab 3: التقارير */}
+                  <button
+                    type="button"
+                    onClick={() => navigate('reports')}
+                    className={`h-full flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition-colors ${
+                      isReportsTab
+                        ? 'text-[#1E4230] dark:text-[#86C89B]'
+                        : 'text-[#6A776E] dark:text-[#8E9F93]'
+                    }`}
+                  >
+                    <BarChart3 className="h-5 w-5" />
+                    <span>التقارير</span>
+                  </button>
+
+                  {/* Tab 4 (Leftmost in RTL): المبيعات */}
+                  <button
+                    type="button"
+                    onClick={() => navigate('sales')}
+                    className={`h-full flex flex-col items-center justify-center gap-0.5 text-[11px] font-bold transition-colors ${
+                      isSalesTab
+                        ? 'text-[#1E4230] dark:text-[#86C89B]'
+                        : 'text-[#6A776E] dark:text-[#8E9F93]'
+                    }`}
+                  >
+                    <Receipt className="h-5 w-5" />
+                    <span>المبيعات</span>
+                  </button>
                 </div>
               </div>
-            );
-          })}
 
-          <div className="pt-2 border-t border-[#C7CBB8]/45 dark:border-[#243B2E] grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {!isInstalled && (
-              <PrimaryButton
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setMoreSheetOpen(false);
-                  openInstallSheet();
-                }}
-              >
-                <Download className="h-4 w-4" />
-                تثبيت التطبيق على الهاتف
-              </PrimaryButton>
-            )}
-            <PrimaryButton
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setMoreSheetOpen(false);
-                setLocked(true);
-                navigate('login');
-              }}
-            >
-              <Lock className="h-4 w-4" />
-              تبديل المستخدم / قفل الشاشة
-            </PrimaryButton>
-          </div>
-        </div>
-      </BottomSheet>
+              {/* Safe area base strip for edge-to-edge devices */}
+              <div className="bg-white dark:bg-[#12231A] h-[var(--safe-bottom)]" />
+            </div>
+          </nav>
+        )}
 
-      {/* First-Visit & On-Demand PWA Install Sheet */}
-      <InstallPromptSheet
-        open={shouldShowSheet}
-        isInstallable={isInstallable}
-        isIOS={isIOS}
-        onInstall={install}
-        onDismissForever={dismissFirstVisitPrompt}
-        onCloseTemporary={closeInstallSheet}
-      />
-
-      {/* Toast Feedback */}
-      {toast && (
-        <div
-          role="status"
-          className={`fixed top-[calc(64px+var(--safe-top))] left-4 right-4 sm:right-auto sm:w-auto sm:min-w-[320px] z-[60] px-4 py-3 rounded-2xl text-sm font-medium shadow-xl ${
-            toast.type === 'error'
-              ? 'bg-red-700 text-white'
-              : toast.type === 'info'
-              ? 'bg-[#3D4337] text-white'
-              : 'bg-[#0F1F17] text-white dark:bg-[#3E5A3F]'
-          }`}
+        {/* Quick Actions 2x3 Bottom Sheet */}
+        <BottomSheet
+          open={quickActionsOpen}
+          onClose={() => setQuickActionsOpen(false)}
+          title="إجراءات سريعة"
+          subtitle="اختصارات العمليات اليومية في قاتشي"
         >
-          {toast.message}
-        </div>
-      )}
+          <div className="grid grid-cols-2 gap-3 pb-1">
+            {visibleQuickActions.map((act) => (
+              <button
+                key={act.id}
+                type="button"
+                onClick={act.onClick}
+                className="p-3.5 rounded-[18px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E5E0D4] dark:border-[#22382B] hover:border-[#2E6046] active:scale-[0.98] transition-all text-right flex flex-col gap-2.5"
+              >
+                <span className={`h-10 w-10 rounded-[13px] flex items-center justify-center ${act.tone}`}>
+                  {act.icon}
+                </span>
+                <div className="w-full text-right">
+                  <div className="font-display font-bold text-sm text-[#16281E] dark:text-[#EEF2EC]">
+                    {act.title}
+                  </div>
+                  <div className="text-[11px] text-[#657369] dark:text-[#98A89C] mt-0.5 line-clamp-1">
+                    {act.desc}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </BottomSheet>
+
+        {/* Global Bulk Messaging Bottom Sheet */}
+        <BulkMessagingSheet
+          open={bulkSheetOpen}
+          onClose={() => setBulkSheetOpen(false)}
+          initialCustomerId={bulkCustomerId}
+        />
+
+        {/* Global Notifications Bottom Sheet */}
+        <NotificationsSheet
+          open={notificationsOpen}
+          onClose={() => setNotificationsOpen(false)}
+        />
+
+        {/* First-Visit & On-Demand PWA Install Sheet */}
+        <InstallPromptSheet
+          open={shouldShowSheet}
+          isInstallable={isInstallable}
+          isIOS={isIOS}
+          onInstall={install}
+          onDismissForever={dismissFirstVisitPrompt}
+          onCloseTemporary={closeInstallSheet}
+        />
+
+        {/* Top-Positioned Toast Bounded Inside 480px Shell */}
+        {toast && (
+          <div
+            role="status"
+            className={`fixed top-[calc(14px+var(--safe-top))] left-1/2 -translate-x-1/2 w-[calc(100%-32px)] max-w-[448px] z-[70] px-4 py-3 rounded-[16px] text-xs sm:text-sm font-semibold shadow-xl pointer-events-none text-center ${
+              toast.type === 'error'
+                ? 'bg-[#B93829] text-white'
+                : toast.type === 'info'
+                ? 'bg-[#4C5850] text-white'
+                : 'bg-[#163022] text-white dark:bg-[#2E6046]'
+            }`}
+          >
+            {toast.message}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

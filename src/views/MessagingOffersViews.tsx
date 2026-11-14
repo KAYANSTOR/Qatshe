@@ -7,6 +7,8 @@ import {
   Contact,
   Edit3,
   ExternalLink,
+  FileText,
+  History,
   MessageSquare,
   Pencil,
   Plus,
@@ -363,16 +365,18 @@ export const MessagingCenterView: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title="مركز الرسائل النصية"
         subtitle="إرسال مباشر عبر شريحة الهاتف بدون خدمات خارجية"
+        icon={<MessageSquare className="h-5 w-5" />}
         backAction={() => {
           if (step > 1) setStep((s) => (s === 4 ? 3 : s === 3 ? 2 : 1));
-          else navigate('dashboard');
+          else navigate('settings');
         }}
-        action={<SmsTopNav active="messaging" />}
       />
+
+      <SmsTopNav active="messaging" />
 
       <StepProgress currentStep={step} totalSteps={4} stepTitle={stepTitles[step - 1]} />
 
@@ -953,9 +957,10 @@ export const TemplatesView: React.FC = () => {
       <PageHeader
         title="قوالب الرسائل"
         subtitle="إضافة وتعديل القوالب الجاهزة للتذكير والعروض"
+        icon={<FileText className="h-5 w-5" />}
         backAction={() => navigate('messaging')}
-        action={<SmsTopNav active="templates" />}
       />
+      <SmsTopNav active="templates" />
 
       <SurfaceCard>
         <form onSubmit={handleSave} className="space-y-3.5">
@@ -1033,7 +1038,7 @@ export const TemplatesView: React.FC = () => {
           description="أضف أول قالب رسالة نصية من النموذج أعلاه لاستخدامه في تذكير الديون وتأكيد الدفعات."
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        <div className="grid grid-cols-1 gap-3">
           {templates.map((t) => {
             const seg = calculateSmsSegments(t.body);
             return (
@@ -1112,9 +1117,10 @@ export const MessageLogView: React.FC = () => {
       <PageHeader
         title="سجل الرسائل النصية"
         subtitle="متابعة حالة كل رسالة بدقة ومنع التكرار العشوائي"
+        icon={<History className="h-5 w-5" />}
         backAction={() => navigate('messaging')}
-        action={<SmsTopNav active="message_log" />}
       />
+      <SmsTopNav active="message_log" />
 
       <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#EFF1EA] dark:bg-[#0B1610] overflow-x-auto">
         {statusTabs.map((tab) => (
@@ -1328,13 +1334,14 @@ export const SmsSettingsView: React.FC = () => {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="إعدادات شريحة الاتصال والرسائل"
+        title="إعدادات شريحة الاتصال"
         subtitle="اختيار شريحة الإرسال الافتراضية والتحقق من جاهزية الهاتف"
+        icon={<Smartphone className="h-5 w-5" />}
         backAction={() => navigate('messaging')}
-        action={<SmsTopNav active="sms_settings" />}
       />
+      <SmsTopNav active="sms_settings" />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-2.5">
         <KpiMetric
           label="وضع التشغيل الحالي"
           value={envStatus?.isNativeAndroid ? 'تطبيق الهاتف المثبّت' : 'وضع المتصفح'}

@@ -1,17 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
-  ArrowLeft,
   BarChart3,
+  CheckCircle2,
+  ChevronLeft,
+  Clock,
   Download,
+  FileSpreadsheet,
   Lock,
   MessageSquare,
   Package,
   Plus,
+  Receipt,
   RotateCcw,
-  SlidersHorizontal,
   Unlock,
   Wallet,
+  XCircle,
 } from 'lucide-react';
 import { useQatshi } from '../context/QatshiContext';
 import { computeDailyCloseSummary, computeProfitReport } from '../domain/accounting';
@@ -31,11 +35,12 @@ import {
 import { generateUuid } from '../services/device';
 import { SalesCollectionChart } from '../components/charts/SalesCollectionChart';
 import {
+  BottomSheet,
   EmptyState,
+  HeaderCircleButton,
   KpiMetric,
   PageHeader,
   PrimaryButton,
-  StepProgress,
   SurfaceCard,
 } from '../components/ui/LuxuryUI';
 
@@ -96,10 +101,11 @@ export const CashboxView: React.FC = () => {
     <div className="space-y-4">
       <PageHeader
         title="الصندوق والإقفال اليومي"
-        subtitle="فصل محاسبي تام بين مبيعات اليوم وتحصيل الديون القديمة"
-        backAction={() => navigate('dashboard')}
+        subtitle="فصل محاسبي تام بين مبيعات اليوم وتحصيل الديون"
+        icon={<Wallet className="h-5 w-5" />}
+        backAction={() => navigate('reports')}
         action={
-          <PrimaryButton variant="secondary" onClick={() => navigate('expenses')}>
+          <PrimaryButton variant="secondary" onClick={() => navigate('expenses')} className="min-h-[40px] px-3 text-xs">
             المصروفات
           </PrimaryButton>
         }
@@ -117,11 +123,11 @@ export const CashboxView: React.FC = () => {
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
           aria-label="تاريخ الصندوق"
-          className="min-h-[48px] px-3.5 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm tabular-nums"
+          className="min-h-[44px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-xs tabular-nums"
         />
       </SurfaceCard>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-2.5">
         <KpiMetric label="الرصيد الافتتاحي" value={fmt(summary.openingBalance)} />
         <KpiMetric label="مبيعات اليوم النقدية" value={fmt(summary.cashSalesReceipts)} tone="positive" />
         <KpiMetric label="تحصيل الديون القديمة" value={fmt(summary.oldDebtCollections)} tone="positive" />
@@ -247,6 +253,7 @@ export const ExpensesView: React.FC = () => {
       <PageHeader
         title="المصروفات اليومية"
         subtitle="توثيق كافة المصروفات التشغيلية وربطها بالصندوق"
+        icon={<Receipt className="h-5 w-5" />}
         backAction={() => navigate('cashbox')}
       />
 
@@ -402,38 +409,50 @@ export const ExpensesView: React.FC = () => {
 };
 
 type ReportKind = 'sales_profit' | 'collections_debts' | 'top_products' | 'sms_summary';
-type PeriodPreset = 'all' | 'today' | 'last7' | 'month' | 'custom';
+type PeriodPreset = 'all' | 'today' | 'last7' | 'month';
 
 export const ReportsView: React.FC = () => {
   const { org, customers, products, sales, payments, expenses, messageLogs, navigate, showToast } = useQatshi();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [reportType, setReportType] = useState<ReportKind>('sales_profit');
+  const [activeReport, setActiveReport] = useState<ReportKind | null>(null);
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [customerId, setCustomerId] = useState('');
-  const [productId, setProductId] = useState('');
 
-  const applyPeriodPreset = (preset: PeriodPreset) => {
-    setPeriodPreset(preset);
-    const today = toLocalDateKey();
-    if (preset === 'all') {
-      setFromDate('');
-      setToDate('');
-    } else if (preset === 'today') {
-      setFromDate(today);
-      setToDate(today);
-    } else if (preset === 'last7') {
+  const todayKey = toLocalDateKey();
+  const monthPrefix = todayKey.slice(0, 7);
+
+  const overview = useMemo(() => {
+    const completedCount = sales.filter((s) => s.status === 'active' && s.remainingAmount <= 0).length;
+    const pendingCreditCount = sales.filter((s) => s.status === 'active' && s.remainingAmount > 0).length;
+    const reversedCount = sales.filter((s) => s.status === 'reversed').length;
+
+    const todaySales = sales.filter((s) => s.status === 'active' && toLocalDateKey(s.createdAt) === todayKey);
+    const monthSales = sales.filter(
+      (s) => s.status === 'active' && toLocalDateKey(s.createdAt).startsWith(monthPrefix)
+    );
+
+    return {
+      completedCount,
+      pendingCreditCount,
+      reversedCount,
+      todayTotal: todaySales.reduce((sum, s) => sum + s.total, 0),
+      todayCount: todaySales.length,
+      monthTotal: monthSales.reduce((sum, s) => sum + s.total, 0),
+      monthCount: monthSales.length,
+    };
+  }, [sales, todayKey, monthPrefix]);
+
+  const { fromDate, toDate } = useMemo(() => {
+    if (periodPreset === 'today') return { fromDate: todayKey, toDate: todayKey };
+    if (periodPreset === 'last7') {
       const start = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
-      setFromDate(toLocalDateKey(start));
-      setToDate(today);
-    } else if (preset === 'month') {
+      return { fromDate: toLocalDateKey(start), toDate: todayKey };
+    }
+    if (periodPreset === 'month') {
       const d = new Date();
       const first = new Date(d.getFullYear(), d.getMonth(), 1);
-      setFromDate(toLocalDateKey(first));
-      setToDate(today);
+      return { fromDate: toLocalDateKey(first), toDate: todayKey };
     }
-  };
+    return { fromDate: '', toDate: '' };
+  }, [periodPreset, todayKey]);
 
   const reportData = useMemo(() => {
     if (!org) return null;
@@ -442,8 +461,6 @@ export const ReportsView: React.FC = () => {
       const d = toLocalDateKey(s.createdAt);
       if (fromDate && d < fromDate) return false;
       if (toDate && d > toDate) return false;
-      if (customerId && s.customerId !== customerId) return false;
-      if (productId && !s.items.some((i) => i.productId === productId)) return false;
       return true;
     });
 
@@ -452,7 +469,6 @@ export const ReportsView: React.FC = () => {
       const d = toLocalDateKey(p.createdAt);
       if (fromDate && d < fromDate) return false;
       if (toDate && d > toDate) return false;
-      if (customerId && p.customerId !== customerId) return false;
       return true;
     });
 
@@ -472,7 +488,6 @@ export const ReportsView: React.FC = () => {
     const productRanking = new Map<string, { name: string; qty: number; rev: number }>();
     for (const s of filteredSales) {
       for (const i of s.items) {
-        if (productId && i.productId !== productId) continue;
         const cur = productRanking.get(i.productId) || { name: `${i.productName} (${i.grade})`, qty: 0, rev: 0 };
         cur.qty += i.quantity;
         cur.rev += i.lineTotal;
@@ -499,46 +514,12 @@ export const ReportsView: React.FC = () => {
       ).length,
       failedMessagesCount: messageLogs.filter((m) => m.status === 'failed').length,
     };
-  }, [org, sales, payments, expenses, products, customers, messageLogs, fromDate, toDate, customerId, productId]);
+  }, [org, sales, payments, expenses, products, customers, messageLogs, fromDate, toDate]);
 
   if (!org || !reportData) return null;
   const fmt = (n: number) => formatMoney(n, org.currency, org.currencyDecimals, org.numberLocale);
 
-  const reportOptions: Array<{
-    id: ReportKind;
-    title: string;
-    desc: string;
-    icon: React.FC<{ className?: string }>;
-  }> = [
-    {
-      id: 'sales_profit',
-      title: 'المبيعات والأرباح',
-      desc: 'تحليل إجمالي المبيعات، النقد المحصل، والأرباح الفعلية',
-      icon: BarChart3,
-    },
-    {
-      id: 'collections_debts',
-      title: 'التحصيل والديون',
-      desc: 'متابعة السداد النقدي والديون القائمة والمصروفات',
-      icon: Wallet,
-    },
-    {
-      id: 'top_products',
-      title: 'الأصناف الأكثر مبيعاً',
-      desc: 'ترتيب أصناف القات حسب الكميات المباعة والعائد',
-      icon: Package,
-    },
-    {
-      id: 'sms_summary',
-      title: 'ملخص الرسائل النصية',
-      desc: 'تقرير حالة الرسائل المرسلة والمؤكدة عبر شريحة الهاتف',
-      icon: MessageSquare,
-    },
-  ];
-
-  const activeReportMeta = reportOptions.find((r) => r.id === reportType) || reportOptions[0];
-
-  const exportReportWorkbook = (format: 'xlsx' | 'csv') => {
+  const exportReportWorkbook = (format: 'xlsx' | 'csv', label = 'المبيعات') => {
     const rows = reportData.filteredSales.map((s) => ({
       'رقم الفاتورة': formatCommercialRef(s.invoiceNumber, 'sale'),
       'التاريخ': formatDateArabic(s.createdAt, org.dateFormat),
@@ -551,310 +532,369 @@ export const ReportsView: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'تقرير المبيعات');
-    const fileName = buildCleanExportFileName(['تقرير', activeReportMeta.title, toLocalDateKey()], format);
+    const fileName = buildCleanExportFileName(['تقرير', label, toLocalDateKey()], format);
     XLSX.writeFile(wb, fileName, { bookType: format });
-    showToast(`تم تصدير التقرير (${activeReportMeta.title})`);
+    showToast(`تم تصدير التقرير (${label})`);
   };
 
-  const stepTitles = [
-    '1. اختيار نوع التقرير',
-    '2. تحديد الفترة والتصفية',
-    `3. نتائج: ${activeReportMeta.title}`,
+  const reportTitles: Record<ReportKind, string> = {
+    sales_profit: 'تقرير المبيعات والأرباح',
+    collections_debts: 'تقرير التحصيل والديون',
+    top_products: 'الأصناف الأكثر مبيعاً',
+    sms_summary: 'ملخص الرسائل النصية',
+  };
+
+  const groups: Array<{
+    heading: string;
+    items: Array<{
+      id: string;
+      title: string;
+      desc: string;
+      icon: React.ReactNode;
+      tint: string;
+      onClick: () => void;
+    }>;
+  }> = [
+    {
+      heading: 'التقارير المالية والمبيعات',
+      items: [
+        {
+          id: 'rep-sales',
+          title: 'تقرير المبيعات والأرباح',
+          desc: 'تحليل المبيعات والنقد المحصل والأرباح بالرسم البياني',
+          icon: <BarChart3 className="h-4.5 w-4.5" />,
+          tint: 'bg-[#E8EFE9] text-[#1E4230] dark:bg-[#193325] dark:text-[#86C89B]',
+          onClick: () => setActiveReport('sales_profit'),
+        },
+        {
+          id: 'rep-debts',
+          title: 'تقرير التحصيل والديون',
+          desc: 'مقارنة التحصيل النقدي والديون القائمة والمصروفات',
+          icon: <Wallet className="h-4.5 w-4.5" />,
+          tint: 'bg-[#F5EFE3] text-[#8E621C] dark:bg-[#2F2513] dark:text-[#EBB354]',
+          onClick: () => setActiveReport('collections_debts'),
+        },
+        {
+          id: 'rep-cashbox',
+          title: 'الصندوق والإقفال اليومي',
+          desc: 'جرد الصندوق اليومي والرصيد الافتتاحي والختامي',
+          icon: <Receipt className="h-4.5 w-4.5" />,
+          tint: 'bg-[#F1ECE6] text-[#5E472D] dark:bg-[#292118] dark:text-[#D5B994]',
+          onClick: () => navigate('cashbox'),
+        },
+        {
+          id: 'rep-expenses',
+          title: 'سجل المصروفات التشغيلية',
+          desc: 'تتبع المصروفات اليومية وعكس السندات',
+          icon: <FileSpreadsheet className="h-4.5 w-4.5" />,
+          tint: 'bg-[#FBEAE8] text-[#B93829] dark:bg-[#361815] dark:text-[#F07D70]',
+          onClick: () => navigate('expenses'),
+        },
+      ],
+    },
+    {
+      heading: 'تقارير الأصناف والتواصل',
+      items: [
+        {
+          id: 'rep-products',
+          title: 'الأصناف الأكثر مبيعاً',
+          desc: 'ترتيب أنواع القات حسب الكميات المباعة والعائد',
+          icon: <Package className="h-4.5 w-4.5" />,
+          tint: 'bg-[#EAF0F6] text-[#244E78] dark:bg-[#16293C] dark:text-[#89BCEE]',
+          onClick: () => setActiveReport('top_products'),
+        },
+        {
+          id: 'rep-sms',
+          title: 'ملخص الرسائل النصية',
+          desc: 'إحصائيات الرسائل المرسلة والمؤكدة والمعلقة',
+          icon: <MessageSquare className="h-4.5 w-4.5" />,
+          tint: 'bg-[#E8EFE9] text-[#1E5638] dark:bg-[#193325] dark:text-[#86C89B]',
+          onClick: () => setActiveReport('sms_summary'),
+        },
+        {
+          id: 'rep-export',
+          title: 'تصدير بيانات المبيعات (Excel)',
+          desc: 'تنزيل سجل الفواتير كاملاً بصيغة XLSX للمراجعة',
+          icon: <Download className="h-4.5 w-4.5" />,
+          tint: 'bg-[#EFECE4] text-[#3F4A42] dark:bg-[#1E2E24] dark:text-[#C5D8CA]',
+          onClick: () => exportReportWorkbook('xlsx', 'سجل_المبيعات'),
+        },
+      ],
+    },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="space-y-4">
       <PageHeader
-        title="مركز التقارير"
-        subtitle="تقارير واضحة ومبسطة خطوة بخطوة مع تصدير الجداول"
-        backAction={() => {
-          if (step > 1) setStep((s) => (s === 3 ? 2 : 1));
-          else navigate('dashboard');
-        }}
+        title="التقارير والمراقبة"
+        subtitle="متابعة حركة العمليات ومقارنة الأداء"
+        icon={<BarChart3 className="h-5 w-5" />}
+        action={
+          <HeaderCircleButton
+            label="تصدير إكسل"
+            onClick={() => exportReportWorkbook('xlsx', 'ملخص_المبيعات')}
+          >
+            <Download className="h-4 w-4" />
+          </HeaderCircleButton>
+        }
       />
 
-      <StepProgress currentStep={step} totalSteps={3} stepTitle={stepTitles[step - 1]} />
-
-      {step === 1 && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {reportOptions.map((opt) => {
-              const Icon = opt.icon;
-              const selected = reportType === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    setReportType(opt.id);
-                    setStep(2);
-                  }}
-                  className={`min-h-[84px] text-right rounded-3xl p-4 sm:p-5 border transition-all flex items-start gap-3.5 active:scale-[0.985] ${
-                    selected
-                      ? 'bg-[#EFF3EB] dark:bg-[#193024] border-[#1E3A2E] dark:border-[#8FB98D]'
-                      : 'bg-white dark:bg-[#12241B] border-[#C7CBB8]/65 dark:border-[#243B2E]'
-                  }`}
-                >
-                  <div className="h-11 w-11 rounded-2xl bg-[#0F1F17] dark:bg-[#3E5A3F] text-white flex items-center justify-center shrink-0">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-display font-bold text-base text-[#0F1F17] dark:text-[#E8EAE0]">
-                      {opt.title}
-                    </div>
-                    <p className="mt-1 text-xs text-[#6B7F67] dark:text-[#9AA896] leading-relaxed">
-                      {opt.desc}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
+      {/* 1. Three-Column Status Metric Cards */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3 text-center space-y-1.5 shadow-[0_1px_6px_rgba(22,40,30,0.03)]">
+          <div className="h-9 w-9 mx-auto rounded-xl bg-[#E8EFE9] dark:bg-[#193325] text-[#1E5638] dark:text-[#86C89B] flex items-center justify-center">
+            <CheckCircle2 className="h-4.5 w-4.5" />
           </div>
-
-          <PrimaryButton type="button" onClick={() => setStep(2)} className="w-full">
-            التالي: تحديد الفترة والتصفية
-            <ArrowLeft className="h-4 w-4" />
-          </PrimaryButton>
+          <div className="font-display text-lg font-extrabold tabular-nums text-[#16281E] dark:text-[#EEF2EC]">
+            {overview.completedCount}
+          </div>
+          <div className="text-[11px] font-medium text-[#657369] dark:text-[#98A89C] truncate">
+            فواتير مسددة
+          </div>
         </div>
-      )}
 
-      {step === 2 && (
-        <SurfaceCard className="space-y-5">
-          <div>
-            <div className="text-sm font-bold mb-2.5">اختر الفترة الزمنية</div>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'all' as PeriodPreset, label: 'جميع الفترات' },
-                { id: 'today' as PeriodPreset, label: 'اليوم' },
-                { id: 'last7' as PeriodPreset, label: 'آخر 7 أيام' },
-                { id: 'month' as PeriodPreset, label: 'هذا الشهر' },
-                { id: 'custom' as PeriodPreset, label: 'فترة مخصصة' },
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => applyPeriodPreset(p.id)}
-                  className={`min-h-[44px] px-4 py-2 rounded-2xl text-xs sm:text-sm font-medium transition-colors ${
-                    periodPreset === p.id
-                      ? 'bg-[#0F1F17] text-white dark:bg-[#3E5A3F]'
-                      : 'bg-[#EFF1EA] dark:bg-[#0B1610] text-[#3D4337] dark:text-[#C7CBB8]'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+        <div className="rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3 text-center space-y-1.5 shadow-[0_1px_6px_rgba(22,40,30,0.03)]">
+          <div className="h-9 w-9 mx-auto rounded-xl bg-[#F5EFE3] dark:bg-[#2F2513] text-[#9E6A14] dark:text-[#EBB354] flex items-center justify-center">
+            <Clock className="h-4.5 w-4.5" />
+          </div>
+          <div className="font-display text-lg font-extrabold tabular-nums text-[#16281E] dark:text-[#EEF2EC]">
+            {overview.pendingCreditCount}
+          </div>
+          <div className="text-[11px] font-medium text-[#657369] dark:text-[#98A89C] truncate">
+            فواتير آجلة
+          </div>
+        </div>
+
+        <div className="rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3 text-center space-y-1.5 shadow-[0_1px_6px_rgba(22,40,30,0.03)]">
+          <div className="h-9 w-9 mx-auto rounded-xl bg-[#FBEAE8] dark:bg-[#361815] text-[#B93829] dark:text-[#F07D70] flex items-center justify-center">
+            <XCircle className="h-4.5 w-4.5" />
+          </div>
+          <div className="font-display text-lg font-extrabold tabular-nums text-[#16281E] dark:text-[#EEF2EC]">
+            {overview.reversedCount}
+          </div>
+          <div className="text-[11px] font-medium text-[#657369] dark:text-[#98A89C] truncate">
+            عمليات معكوسة
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Vertically Split Sales Comparison Card (Today vs Month) */}
+      <SurfaceCard className="p-0 overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-[#EFEBE2] dark:border-[#203529] flex items-center justify-between">
+          <span className="font-display text-xs font-extrabold text-[#16281E] dark:text-[#EEF2EC]">
+            مقارنة أداء المبيعات
+          </span>
+          <span className="text-[11px] text-[#657369] dark:text-[#98A89C]">
+            اليوم مقابل الشهر الحالي
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2">
+          <div className="p-4 text-right space-y-1 border-l border-[#EFEBE2] dark:border-[#203529]">
+            <div className="text-[11px] font-medium text-[#657369] dark:text-[#98A89C]">
+              مبيعات اليوم
+            </div>
+            <div className="font-display text-base font-extrabold tabular-nums text-[#1E4230] dark:text-[#86C89B] truncate">
+              {fmt(overview.todayTotal)}
+            </div>
+            <div className="text-[11px] text-[#7A877D] dark:text-[#88988C] tabular-nums">
+              {overview.todayCount} عملية نشطة
             </div>
           </div>
 
-          {(periodPreset === 'custom' || fromDate || toDate) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="rep-from" className="block text-xs font-medium text-[#6B7F67] mb-1.5">
-                  من تاريخ
-                </label>
-                <input
-                  id="rep-from"
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => {
-                    setPeriodPreset('custom');
-                    setFromDate(e.target.value);
-                  }}
-                  className="w-full min-h-[48px] px-3.5 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm tabular-nums"
-                />
-              </div>
-              <div>
-                <label htmlFor="rep-to" className="block text-xs font-medium text-[#6B7F67] mb-1.5">
-                  إلى تاريخ
-                </label>
-                <input
-                  id="rep-to"
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => {
-                    setPeriodPreset('custom');
-                    setToDate(e.target.value);
-                  }}
-                  className="w-full min-h-[48px] px-3.5 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm tabular-nums"
-                />
-              </div>
+          <div className="p-4 text-right space-y-1">
+            <div className="text-[11px] font-medium text-[#657369] dark:text-[#98A89C]">
+              مبيعات الشهر
             </div>
-          )}
-
-          {reportType !== 'sms_summary' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="rep-cust" className="block text-xs font-medium text-[#6B7F67] mb-1.5">
-                  تصفية حسب العميل (اختياري)
-                </label>
-                <select
-                  id="rep-cust"
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className="w-full min-h-[48px] px-3.5 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
-                >
-                  <option value="">جميع العملاء</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.fullName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="rep-prod" className="block text-xs font-medium text-[#6B7F67] mb-1.5">
-                  تصفية حسب الصنف (اختياري)
-                </label>
-                <select
-                  id="rep-prod"
-                  value={productId}
-                  onChange={(e) => setProductId(e.target.value)}
-                  className="w-full min-h-[48px] px-3.5 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
-                >
-                  <option value="">جميع الأصناف</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.grade})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="font-display text-base font-extrabold tabular-nums text-[#16281E] dark:text-[#EEF2EC] truncate">
+              {fmt(overview.monthTotal)}
             </div>
-          )}
-
-          <div className="flex flex-col-reverse sm:flex-row gap-2.5 pt-2">
-            <PrimaryButton type="button" variant="secondary" onClick={() => setStep(1)} className="w-full sm:w-auto">
-              السابق
-            </PrimaryButton>
-            <PrimaryButton type="button" onClick={() => setStep(3)} className="w-full sm:flex-1">
-              عرض نتائج التقرير
-            </PrimaryButton>
+            <div className="text-[11px] text-[#7A877D] dark:text-[#88988C] tabular-nums">
+              {overview.monthCount} عملية نشطة
+            </div>
           </div>
-        </SurfaceCard>
-      )}
+        </div>
+      </SurfaceCard>
 
-      {step === 3 && (
-        <div className="space-y-4">
-          <SurfaceCard className="p-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs text-[#6B7F67]">التقرير المعروض</div>
-              <div className="font-display font-bold text-base">
-                {activeReportMeta.title}
-                {fromDate || toDate ? ` (${fromDate || '...'} إلى ${toDate || '...'})` : ' (كامل السجل)'}
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <PrimaryButton variant="secondary" onClick={() => setStep(2)}>
-                <SlidersHorizontal className="h-4 w-4" />
-                تغيير الفلاتر
-              </PrimaryButton>
-              <PrimaryButton variant="secondary" onClick={() => exportReportWorkbook('csv')}>
-                تصدير جدول
-              </PrimaryButton>
-              <PrimaryButton onClick={() => exportReportWorkbook('xlsx')}>
+      {/* 3. Grouped Navigation Lists */}
+      {groups.map((grp) => (
+        <section key={grp.heading} className="space-y-2">
+          <h2 className="font-display text-xs font-extrabold text-[#657369] dark:text-[#98A89C] px-1">
+            {grp.heading}
+          </h2>
+          <SurfaceCard className="p-0 overflow-hidden divide-y divide-[#EFEBE2] dark:divide-[#203529]">
+            {grp.items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={item.onClick}
+                className="w-full px-3.5 py-3 flex items-center justify-between gap-3 text-right hover:bg-[#FAF8F4] dark:hover:bg-[#193325] transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className={`h-10 w-10 rounded-[13px] flex items-center justify-center shrink-0 ${item.tint}`}>
+                    {item.icon}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-display text-sm font-bold text-[#16281E] dark:text-[#EEF2EC] truncate">
+                      {item.title}
+                    </div>
+                    <div className="text-[11px] text-[#657369] dark:text-[#98A89C] truncate mt-0.5">
+                      {item.desc}
+                    </div>
+                  </div>
+                </div>
+                <ChevronLeft className="h-4.5 w-4.5 text-[#8D9990] shrink-0" />
+              </button>
+            ))}
+          </SurfaceCard>
+        </section>
+      ))}
+
+      {/* Interactive Report Detail Bottom Sheet */}
+      <BottomSheet
+        open={Boolean(activeReport)}
+        onClose={() => setActiveReport(null)}
+        title={activeReport ? reportTitles[activeReport] : ''}
+        subtitle={fromDate || toDate ? `الفترة: ${fromDate} إلى ${toDate}` : 'كامل السجل المسجل'}
+        headerIcon={<BarChart3 className="h-5 w-5" />}
+        footer={
+          activeReport && (
+            <div className="flex items-center gap-2">
+              <PrimaryButton
+                onClick={() => exportReportWorkbook('xlsx', reportTitles[activeReport])}
+                className="flex-1"
+              >
                 <Download className="h-4 w-4" />
                 تصدير إكسل
               </PrimaryButton>
+              <PrimaryButton
+                variant="secondary"
+                onClick={() => exportReportWorkbook('csv', reportTitles[activeReport])}
+              >
+                CSV
+              </PrimaryButton>
             </div>
-          </SurfaceCard>
+          )
+        }
+      >
+        {/* Quick Period Filter Pills inside Report Modal */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          {[
+            { id: 'all' as PeriodPreset, label: 'كامل السجل' },
+            { id: 'today' as PeriodPreset, label: 'اليوم' },
+            { id: 'last7' as PeriodPreset, label: 'آخر 7 أيام' },
+            { id: 'month' as PeriodPreset, label: 'هذا الشهر' },
+          ].map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setPeriodPreset(p.id)}
+              className={`min-h-[36px] px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border ${
+                periodPreset === p.id
+                  ? 'bg-[#1E4230] text-white border-[#1E4230] dark:bg-[#2E6046] dark:border-[#2E6046]'
+                  : 'bg-[#FAF8F4] dark:bg-[#0D1A13] border-[#E4DFD4] dark:border-[#22382B] text-[#4C5850] dark:text-[#C5D8CA]'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
 
-          {reportType === 'sales_profit' && (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <KpiMetric label="إجمالي المبيعات" value={fmt(reportData.profit.totalRevenue)} />
-                <KpiMetric
-                  label="النقد المحصل"
-                  value={fmt(reportData.totalCashSales + reportData.totalDebtCollections)}
-                  tone="positive"
-                />
-                <KpiMetric label="المصروفات" value={fmt(reportData.totalExpenses)} tone="danger" />
-                <KpiMetric
-                  label="الربح الفعلي"
-                  value={fmt(reportData.profit.actualProfitOnCostedItems)}
-                  tone="positive"
-                  meta={
-                    reportData.profit.hasUncostedItems
-                      ? `يوجد ${fmt(reportData.profit.uncostedRevenue)} دون تكلفة مسجلة`
-                      : 'كافة الأصناف مسجلة التكلفة'
-                  }
-                />
-              </div>
+        {activeReport === 'sales_profit' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2.5">
+              <KpiMetric label="إجمالي المبيعات" value={fmt(reportData.profit.totalRevenue)} />
+              <KpiMetric
+                label="النقد المحصل"
+                value={fmt(reportData.totalCashSales + reportData.totalDebtCollections)}
+                tone="positive"
+              />
+              <KpiMetric label="المصروفات" value={fmt(reportData.totalExpenses)} tone="danger" />
+              <KpiMetric
+                label="الربح الفعلي"
+                value={fmt(reportData.profit.actualProfitOnCostedItems)}
+                tone="positive"
+                meta={
+                  reportData.profit.hasUncostedItems
+                    ? `${fmt(reportData.profit.uncostedRevenue)} دون تكلفة`
+                    : 'الأصناف مسجلة التكلفة'
+                }
+              />
+            </div>
 
-              <SurfaceCard>
-                <SalesCollectionChart
-                  sales={reportData.filteredSales}
-                  payments={reportData.filteredPayments}
-                  org={org}
-                />
-              </SurfaceCard>
-            </>
-          )}
+            <div className="rounded-[18px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E4DFD4] dark:border-[#22382B] p-3">
+              <SalesCollectionChart
+                sales={reportData.filteredSales}
+                payments={reportData.filteredPayments}
+                org={org}
+              />
+            </div>
+          </div>
+        )}
 
-          {reportType === 'collections_debts' && (
-            <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <KpiMetric label="تحصيل فواتير اليوم" value={fmt(reportData.totalCashSales)} tone="positive" />
-                <KpiMetric label="تحصيل ديون قديمة" value={fmt(reportData.totalDebtCollections)} tone="positive" />
-                <KpiMetric label="الديون القائمة حالياً" value={fmt(reportData.totalOpenDebts)} tone="warning" />
-                <KpiMetric label="إجمالي المصروفات" value={fmt(reportData.totalExpenses)} tone="danger" />
-              </div>
+        {activeReport === 'collections_debts' && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2.5">
+              <KpiMetric label="تحصيل فواتير اليوم" value={fmt(reportData.totalCashSales)} tone="positive" />
+              <KpiMetric label="تحصيل ديون قديمة" value={fmt(reportData.totalDebtCollections)} tone="positive" />
+              <KpiMetric label="الديون القائمة حالياً" value={fmt(reportData.totalOpenDebts)} tone="warning" />
+              <KpiMetric label="إجمالي المصروفات" value={fmt(reportData.totalExpenses)} tone="danger" />
+            </div>
 
-              <SurfaceCard className="space-y-3">
-                <h3 className="font-display text-base font-bold">سندات التحصيل في الفترة</h3>
-                {reportData.filteredPayments.length === 0 ? (
-                  <p className="text-sm text-[#6B7F67] py-4 text-center">لا توجد عمليات تحصيل في هذه الفترة.</p>
-                ) : (
-                  <div className="divide-y divide-[#C7CBB8]/40 dark:divide-[#243B2E]">
-                    {reportData.filteredPayments.slice(0, 20).map((p) => (
-                      <div key={p.id} className="py-3 flex items-center justify-between gap-2 text-sm">
-                        <div className="min-w-0">
-                          <div className="font-semibold truncate">{p.customerName}</div>
-                          <div className="text-xs text-[#6B7F67]">
-                            {formatCommercialRef(p.receiptNumber, 'payment')} · {formatPaymentMethodArabic(p.paymentMethod)}
-                          </div>
-                        </div>
-                        <span className="font-bold tabular-nums text-[#1E3A2E] dark:text-[#8FB98D] shrink-0">
-                          {fmt(p.amount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </SurfaceCard>
-            </>
-          )}
-
-          {reportType === 'top_products' && (
-            <SurfaceCard className="space-y-3">
-              <h3 className="font-display text-base font-bold">ترتيب الأصناف الأكثر مبيعاً</h3>
-              {reportData.topProducts.length === 0 ? (
-                <p className="text-sm text-[#6B7F67] py-6 text-center">لا توجد مبيعات مسجلة خلال هذه الفترة.</p>
+            <div className="rounded-[18px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E4DFD4] dark:border-[#22382B] p-3 space-y-2">
+              <div className="text-xs font-bold">سندات التحصيل في الفترة</div>
+              {reportData.filteredPayments.length === 0 ? (
+                <p className="text-xs text-[#657369] py-3 text-center">لا توجد عمليات تحصيل في هذه الفترة.</p>
               ) : (
-                <div className="divide-y divide-[#C7CBB8]/40 dark:divide-[#243B2E]">
-                  {reportData.topProducts.map((p, idx) => (
-                    <div key={idx} className="py-3 flex items-center justify-between gap-3 text-sm">
+                <div className="divide-y divide-[#EFEBE2] dark:divide-[#203529]">
+                  {reportData.filteredPayments.slice(0, 15).map((p) => (
+                    <div key={p.id} className="py-2 flex items-center justify-between gap-2 text-xs">
                       <div className="min-w-0">
-                        <div className="font-semibold truncate">{p.name}</div>
-                        <div className="text-xs text-[#6B7F67]">{p.qty} وحدة مباعة</div>
+                        <div className="font-bold truncate">{p.customerName}</div>
+                        <div className="text-[11px] text-[#657369]">
+                          {formatCommercialRef(p.receiptNumber, 'payment')} · {formatPaymentMethodArabic(p.paymentMethod)}
+                        </div>
                       </div>
-                      <span className="font-bold tabular-nums shrink-0">{fmt(p.rev)}</span>
+                      <span className="font-extrabold tabular-nums text-[#1E5638] dark:text-[#86C89B] shrink-0">
+                        {fmt(p.amount)}
+                      </span>
                     </div>
                   ))}
                 </div>
               )}
-            </SurfaceCard>
-          )}
-
-          {reportType === 'sms_summary' && (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiMetric label="رسائل مرسلة للشبكة" value={String(reportData.sentMessagesCount)} tone="positive" />
-              <KpiMetric label="تم تأكيد التسليم" value={String(reportData.deliveredMessagesCount)} tone="positive" />
-              <KpiMetric label="بانتظار الإرسال" value={String(reportData.queuedMessagesCount)} tone="warning" />
-              <KpiMetric label="تعذر إرسالها" value={String(reportData.failedMessagesCount)} tone="danger" />
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+
+        {activeReport === 'top_products' && (
+          <div className="rounded-[18px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E4DFD4] dark:border-[#22382B] p-3 space-y-2">
+            {reportData.topProducts.length === 0 ? (
+              <p className="text-xs text-[#657369] py-4 text-center">لا توجد مبيعات مسجلة خلال هذه الفترة.</p>
+            ) : (
+              <div className="divide-y divide-[#EFEBE2] dark:divide-[#203529]">
+                {reportData.topProducts.map((p, idx) => (
+                  <div key={idx} className="py-2.5 flex items-center justify-between gap-2 text-xs">
+                    <div className="min-w-0">
+                      <div className="font-bold truncate">{p.name}</div>
+                      <div className="text-[11px] text-[#657369]">{p.qty} وحدة مباعة</div>
+                    </div>
+                    <span className="font-extrabold tabular-nums shrink-0">{fmt(p.rev)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeReport === 'sms_summary' && (
+          <div className="grid grid-cols-2 gap-2.5">
+            <KpiMetric label="رسائل مرسلة للشبكة" value={String(reportData.sentMessagesCount)} tone="positive" />
+            <KpiMetric label="تم تأكيد التسليم" value={String(reportData.deliveredMessagesCount)} tone="positive" />
+            <KpiMetric label="بانتظار الإرسال" value={String(reportData.queuedMessagesCount)} tone="warning" />
+            <KpiMetric label="تعذر إرسالها" value={String(reportData.failedMessagesCount)} tone="danger" />
+          </div>
+        )}
+      </BottomSheet>
     </div>
   );
 };

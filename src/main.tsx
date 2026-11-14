@@ -1,9 +1,7 @@
-import '@fontsource/ibm-plex-sans-arabic/400.css';
-import '@fontsource/ibm-plex-sans-arabic/500.css';
-import '@fontsource/ibm-plex-sans-arabic/600.css';
-import '@fontsource/ibm-plex-sans-arabic/700.css';
-import '@fontsource/readex-pro/600.css';
-import '@fontsource/readex-pro/700.css';
+import '@fontsource/tajawal/400.css';
+import '@fontsource/tajawal/500.css';
+import '@fontsource/tajawal/700.css';
+import '@fontsource/tajawal/800.css';
 import { registerSW } from 'virtual:pwa-register';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';

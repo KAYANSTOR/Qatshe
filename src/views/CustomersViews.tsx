@@ -1,18 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Banknote,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Download,
+  Edit3,
   FileText,
   MessageSquare,
+  MoreVertical,
   Plus,
   Printer,
   RotateCcw,
   Search,
   Share2,
+  ShoppingBag,
   Upload,
   UserCheck,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import { db } from '../db/qatshiDb';
 import { useQatshi } from '../context/QatshiContext';
@@ -30,17 +36,26 @@ import {
 import { generateUuid } from '../services/device';
 import { generateCustomerStatementPdf, triggerBlobDownload } from '../services/pdfGenerator';
 import { sharePdfDocument } from '../services/shareService';
-import { EmptyState, KpiMetric, PageHeader, PrimaryButton, SurfaceCard } from '../components/ui/LuxuryUI';
+import {
+  BottomSheet,
+  EmptyState,
+  HeaderCircleButton,
+  KpiMetric,
+  PageHeader,
+  PrimaryButton,
+  SurfaceCard,
+} from '../components/ui/LuxuryUI';
 
 const PAGE_SIZE = 20;
 
 export const CustomersListView: React.FC = () => {
   const { org, activeUser, customers, orgCounts, navigate, refreshData, showToast } = useQatshi();
   const [query, setQuery] = useState('');
-  const [filterCat, setFilterCat] = useState<'all' | 'debtors' | 'vip' | 'inactive'>('all');
+  const [balanceFilter, setBalanceFilter] = useState<'all' | 'debtor' | 'creditor' | 'zero'>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'debt_desc' | 'purchases_desc' | 'name'>('recent');
   const [page, setPage] = useState(1);
   const [indexedSearchResults, setIndexedSearchResults] = useState<Customer[] | null>(null);
+  const [menuCustomer, setMenuCustomer] = useState<Customer | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -67,14 +82,50 @@ export const CustomersListView: React.FC = () => {
     };
   }, [org, query, orgCounts.customers, customers.length]);
 
+  const stats = useMemo(() => {
+    let debtorsTotal = 0;
+    let creditorsTotal = 0;
+    let debtorsCount = 0;
+    let creditorsCount = 0;
+    let zeroCount = 0;
+
+    for (const c of customers) {
+      if (c.cachedBalance > 0) {
+        debtorsTotal += c.cachedBalance;
+        debtorsCount += 1;
+      } else if (c.cachedBalance < 0) {
+        creditorsTotal += Math.abs(c.cachedBalance);
+        creditorsCount += 1;
+      } else {
+        zeroCount += 1;
+      }
+    }
+
+    const totalAccounts = Math.max(1, customers.length);
+    const debtorPct = Math.round((debtorsCount / totalAccounts) * 100);
+    const creditorPct = Math.round((creditorsCount / totalAccounts) * 100);
+    const zeroPct = Math.max(0, 100 - debtorPct - creditorPct);
+
+    return {
+      debtorsTotal,
+      creditorsTotal,
+      debtorsCount,
+      creditorsCount,
+      zeroCount,
+      debtorPct,
+      creditorPct,
+      zeroPct,
+    };
+  }, [customers]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const source = indexedSearchResults !== null && q ? indexedSearchResults : customers;
     let list = source.filter((c) => {
       if (q && !c.fullName.toLowerCase().includes(q) && !c.phone.includes(q)) return false;
-      if (filterCat === 'debtors') return c.cachedBalance > 0;
-      if (filterCat === 'vip') return c.category === 'vip';
-      if (filterCat === 'inactive') return c.status === 'inactive';
+      if (balanceFilter === 'debtor') return c.cachedBalance > 0;
+      if (balanceFilter === 'creditor') return c.cachedBalance < 0;
+      if (balanceFilter === 'zero') return c.cachedBalance === 0;
       return true;
     });
 
@@ -85,7 +136,7 @@ export const CustomersListView: React.FC = () => {
       return b.updatedAt.localeCompare(a.updatedAt);
     });
     return list;
-  }, [customers, indexedSearchResults, query, filterCat, sortBy]);
+  }, [customers, indexedSearchResults, query, balanceFilter, sortBy]);
 
   if (!org || !activeUser) return null;
 
@@ -107,43 +158,146 @@ export const CustomersListView: React.FC = () => {
     }
   };
 
+  const categoryLabel = (cat: CustomerCategory) =>
+    cat === 'vip' ? 'مميز' : cat === 'wholesale' ? 'جملة' : 'عادي';
+
   return (
     <div className="space-y-4">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        onChange={handleImport}
+        className="hidden"
+      />
+
+      {/* Clean Inner Header */}
       <PageHeader
-        title="العملاء"
-        subtitle={`${orgCounts.customers} عميل مسجل`}
+        title="الحسابات والعملاء"
+        subtitle={`${orgCounts.customers} حساب مسجل في الدفتر`}
+        icon={<Users className="h-5 w-5" />}
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleImport}
-              className="hidden"
-            />
-            <PrimaryButton variant="secondary" onClick={() => fileInputRef.current?.click()}>
+          <>
+            <HeaderCircleButton
+              label="استيراد عملاء"
+              onClick={() => fileInputRef.current?.click()}
+            >
               <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">استيراد</span>
-            </PrimaryButton>
-            <PrimaryButton variant="secondary" onClick={() => exportCustomersToWorkbook(filtered, 'xlsx')}>
+            </HeaderCircleButton>
+            <HeaderCircleButton
+              label="تصدير كشف العملاء"
+              onClick={() => exportCustomersToWorkbook(filtered, 'xlsx')}
+            >
               <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">تصدير</span>
-            </PrimaryButton>
-            <PrimaryButton onClick={() => navigate('customer_form')}>
-              <Plus className="h-4 w-4" />
-              إضافة عميل
-            </PrimaryButton>
-          </div>
+            </HeaderCircleButton>
+          </>
         }
       />
 
-      <SurfaceCard className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-          <div className="md:col-span-6 relative">
+      {/* 1. Summary Stat Card (2-col grid + Interactive Distribution Bar) */}
+      <SurfaceCard className="space-y-3.5">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-[16px] bg-[#FBEAE8]/55 dark:bg-[#361815]/40 border border-[#F2CFCB] dark:border-[#4D2420]">
+            <div className="text-[11px] font-medium text-[#7C2B22] dark:text-[#F0998E]">
+              إجمالي المستحقات (مدين)
+            </div>
+            <div className="font-display text-base font-extrabold tabular-nums text-[#B93829] dark:text-[#F07D70] mt-0.5 truncate">
+              {fmt(stats.debtorsTotal)}
+            </div>
+            <div className="text-[10px] text-[#8E4941] dark:text-[#D58C83] mt-0.5 tabular-nums">
+              {stats.debtorsCount} حساب مدين
+            </div>
+          </div>
+
+          <div className="p-3 rounded-[16px] bg-[#E8EFE9]/75 dark:bg-[#193325]/60 border border-[#D4E0D6] dark:border-[#284C38]">
+            <div className="text-[11px] font-medium text-[#2A533C] dark:text-[#9FD3AD]">
+              الأرصدة الدائنة (فائض)
+            </div>
+            <div className="font-display text-base font-extrabold tabular-nums text-[#1E5638] dark:text-[#86C89B] mt-0.5 truncate">
+              {fmt(stats.creditorsTotal)}
+            </div>
+            <div className="text-[10px] text-[#4A6E58] dark:text-[#8FB89D] mt-0.5 tabular-nums">
+              {stats.creditorsCount} دائن · {stats.zeroCount} رصيد صفر
+            </div>
+          </div>
+        </div>
+
+        {/* Interactive Distribution Bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-[#657369] dark:text-[#98A89C]">
+            <span>توزيع حالات الحسابات</span>
+            <span className="tabular-nums font-semibold">
+              مدين {stats.debtorPct}% · مصفى {stats.zeroPct}%
+            </span>
+          </div>
+          <div className="h-2.5 w-full rounded-full bg-[#EFECE4] dark:bg-[#1B3326] overflow-hidden flex">
+            {stats.debtorPct > 0 && (
+              <button
+                type="button"
+                aria-label="تصفية الحسابات المدينة"
+                onClick={() => {
+                  setBalanceFilter('debtor');
+                  setPage(1);
+                }}
+                style={{ width: `${stats.debtorPct}%` }}
+                className="h-full bg-[#B93829] transition-all"
+              />
+            )}
+            {stats.creditorPct > 0 && (
+              <button
+                type="button"
+                aria-label="تصفية الحسابات الدائنة"
+                onClick={() => {
+                  setBalanceFilter('creditor');
+                  setPage(1);
+                }}
+                style={{ width: `${stats.creditorPct}%` }}
+                className="h-full bg-[#1E5638] transition-all"
+              />
+            )}
+            {stats.zeroPct > 0 && (
+              <button
+                type="button"
+                aria-label="تصفية الحسابات الصفرية"
+                onClick={() => {
+                  setBalanceFilter('zero');
+                  setPage(1);
+                }}
+                style={{ width: `${stats.zeroPct}%` }}
+                className="h-full bg-[#A8A396] dark:bg-[#496354] transition-all"
+              />
+            )}
+          </div>
+        </div>
+      </SurfaceCard>
+
+      {/* 2. Two Equal 50%-Width Direct Action Buttons */}
+      <div className="grid grid-cols-2 gap-2.5">
+        <PrimaryButton
+          onClick={() => navigate('customer_form')}
+          className="w-full min-h-[48px] text-xs sm:text-sm"
+        >
+          <UserPlus className="h-4 w-4 shrink-0" />
+          إضافة عميل جديد
+        </PrimaryButton>
+        <PrimaryButton
+          variant="secondary"
+          onClick={() => window.dispatchEvent(new CustomEvent('qatshi:open-bulk-sms'))}
+          className="w-full min-h-[48px] text-xs sm:text-sm"
+        >
+          <MessageSquare className="h-4 w-4 shrink-0" />
+          رسائل جماعية
+        </PrimaryButton>
+      </div>
+
+      {/* 3. Search Bar & Horizontally Scrollable Filter Pills */}
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
             <label htmlFor="customer-search" className="sr-only">
               البحث بالاسم أو رقم الهاتف
             </label>
-            <Search className="h-4 w-4 text-[#6B7F67] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="h-4 w-4 text-[#657369] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               id="customer-search"
               type="search"
@@ -153,133 +307,226 @@ export const CustomersListView: React.FC = () => {
                 setPage(1);
               }}
               placeholder="ابحث بالاسم أو رقم الهاتف..."
-              className="w-full min-h-[46px] pr-10 pl-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
+              className="w-full min-h-[46px] pr-10 pl-3 rounded-[16px] border border-[#E2DDD0] dark:border-[#22382B] bg-white dark:bg-[#12231A] text-sm"
             />
           </div>
 
-          <div className="grid grid-cols-2 md:col-span-6 gap-2.5">
-            <select
-              id="customer-filter"
-              aria-label="تصفية العملاء"
-              value={filterCat}
-              onChange={(e) => {
-                setFilterCat(e.target.value as typeof filterCat);
-                setPage(1);
-              }}
-              className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
-            >
-              <option value="all">جميع العملاء</option>
-              <option value="debtors">المدينون فقط</option>
-              <option value="vip">المميزون</option>
-              <option value="inactive">غير النشطين</option>
-            </select>
-
-            <select
-              id="customer-sort"
-              aria-label="ترتيب العملاء"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-              className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm"
-            >
-              <option value="recent">الأحدث نشاطاً</option>
-              <option value="debt_desc">الأعلى مديونية</option>
-              <option value="purchases_desc">الأكثر شراءً</option>
-              <option value="name">أبجدياً</option>
-            </select>
-          </div>
+          <select
+            id="customer-sort"
+            aria-label="ترتيب الحسابات"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="min-h-[46px] px-2.5 rounded-[16px] border border-[#E2DDD0] dark:border-[#22382B] bg-white dark:bg-[#12231A] text-xs font-semibold shrink-0"
+          >
+            <option value="recent">الأحدث</option>
+            <option value="debt_desc">الأعلى ديناً</option>
+            <option value="purchases_desc">الأكثر شراءً</option>
+            <option value="name">أبجدياً</option>
+          </select>
         </div>
 
-        {paged.length === 0 ? (
-          <EmptyState
-            title="لا يوجد عملاء مسجلون"
-            description="أضف عميلاً جديداً بالاسم ورقم الهاتف في ثوانٍ."
-            actionLabel="إضافة عميل جديد"
-            onAction={() => navigate('customer_form')}
-          />
-        ) : (
-          <div className="space-y-2.5">
-            {paged.map((c) => (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          {[
+            { id: 'all' as const, label: `الكل (${customers.length})` },
+            { id: 'debtor' as const, label: `مدين (${stats.debtorsCount})` },
+            { id: 'creditor' as const, label: `دائن (${stats.creditorsCount})` },
+            { id: 'zero' as const, label: `رصيد صفر (${stats.zeroCount})` },
+          ].map((pill) => {
+            const active = balanceFilter === pill.id;
+            return (
+              <button
+                key={pill.id}
+                type="button"
+                onClick={() => {
+                  setBalanceFilter(pill.id);
+                  setPage(1);
+                }}
+                className={`min-h-[38px] px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap shrink-0 border transition-colors ${
+                  active
+                    ? 'bg-[#1E4230] text-white border-[#1E4230] dark:bg-[#2E6046] dark:border-[#2E6046]'
+                    : 'bg-white dark:bg-[#12231A] text-[#4C5850] dark:text-[#C5D8CA] border-[#E4DFD4] dark:border-[#22382B]'
+                }`}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 4. Independent Account List Cards */}
+      {paged.length === 0 ? (
+        <EmptyState
+          title="لا توجد حسابات مطابقة"
+          description="أضف عميلاً جديداً بالاسم ورقم الهاتف أو عدّل خيارات البحث والتصفية."
+          actionLabel="إضافة عميل جديد"
+          onAction={() => navigate('customer_form')}
+        />
+      ) : (
+        <div className="space-y-2.5">
+          {paged.map((c) => {
+            const initial = c.fullName.trim().charAt(0) || 'ع';
+            const isDebtor = c.cachedBalance > 0;
+            const isCreditor = c.cachedBalance < 0;
+            const badgeStyle = isDebtor
+              ? 'bg-[#FBEAE8] text-[#B93829] dark:bg-[#361815] dark:text-[#F07D70]'
+              : isCreditor
+              ? 'bg-[#E8EFE9] text-[#1E5638] dark:bg-[#193325] dark:text-[#86C89B]'
+              : 'bg-[#F1EFE9] text-[#5C665E] dark:bg-[#1A2D22] dark:text-[#98A89C]';
+
+            return (
               <div
                 key={c.id}
-                className="p-3.5 rounded-2xl border border-[#C7CBB8]/55 dark:border-[#243B2E] bg-[#F9FAF7]/60 dark:bg-[#0B1610]/50 space-y-3"
+                className="rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3.5 flex items-center justify-between gap-2.5 shadow-[0_1px_6px_rgba(22,40,30,0.03)]"
               >
+                {/* Right Side (RTL Start): Circular Initial Avatar + Status Dot + Name & Phone & Tags */}
                 <button
                   type="button"
                   onClick={() => navigate('customer_profile', { customerId: c.id })}
-                  className="w-full flex items-center justify-between gap-3 text-right"
+                  className="flex items-center gap-3 min-w-0 flex-1 text-right"
                 >
-                  <div className="min-w-0">
-                    <div className="font-display font-bold text-sm sm:text-base text-[#0F1F17] dark:text-[#E8EAE0] truncate">
+                  <div className="relative h-11 w-11 rounded-full bg-[#E8EFE9] dark:bg-[#193325] text-[#1E4230] dark:text-[#86C89B] font-display font-extrabold text-base flex items-center justify-center shrink-0">
+                    <span>{initial}</span>
+                    <span
+                      className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white dark:border-[#12231A] ${
+                        c.status === 'active' ? 'bg-[#2E6046]' : 'bg-[#98A29B]'
+                      }`}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-display font-bold text-sm text-[#16281E] dark:text-[#EEF2EC] truncate">
                       {c.fullName}
                     </div>
-                    <div className="text-xs text-[#6B7F67] mt-0.5 tabular-nums">
+                    <div className="text-xs text-[#657369] dark:text-[#98A89C] tabular-nums truncate mt-0.5">
                       {c.phone}
-                      {c.address ? ` · ${c.address}` : ''}
-                    </div>
-                  </div>
-                  <div className="text-left shrink-0">
-                    <div className="text-[11px] text-[#6B7F67]">الرصيد المستحق</div>
-                    <div
-                      className={`text-sm sm:text-base font-bold tabular-nums ${
-                        c.cachedBalance > 0 ? 'text-red-700 dark:text-red-400' : 'text-[#1E3A2E] dark:text-[#8FB98D]'
-                      }`}
-                    >
-                      {fmt(c.cachedBalance)}
+                      {c.category !== 'regular' ? ` · ${categoryLabel(c.category)}` : ''}
                     </div>
                   </div>
                 </button>
 
-                <div className="flex items-center gap-2 pt-2 border-t border-[#C7CBB8]/35 dark:border-[#243B2E]">
-                  <PrimaryButton
-                    variant="secondary"
-                    onClick={() => navigate('customer_profile', { customerId: c.id })}
-                    className="flex-1 min-h-[42px]"
-                  >
-                    ملف العميل
-                  </PrimaryButton>
-                  <PrimaryButton
-                    variant="secondary"
+                {/* Left Side (RTL End): Colored Balance Capsule + 3-Dots Options Button */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
                     onClick={() => navigate('customer_statement', { customerId: c.id })}
-                    className="flex-1 min-h-[42px]"
+                    className={`px-2.5 py-1.5 rounded-full text-xs font-extrabold tabular-nums whitespace-nowrap ${badgeStyle}`}
                   >
-                    كشف حساب
-                  </PrimaryButton>
-                  {c.cachedBalance > 0 && (
-                    <PrimaryButton
-                      onClick={() => navigate('collection', { customerId: c.id })}
-                      className="flex-1 min-h-[42px]"
-                    >
-                      سداد
-                    </PrimaryButton>
-                  )}
+                    {isCreditor ? `${fmt(Math.abs(c.cachedBalance))} له` : fmt(c.cachedBalance)}
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-label={`خيارات حساب ${c.fullName}`}
+                    onClick={() => setMenuCustomer(c)}
+                    className="h-9 w-9 rounded-full inline-flex items-center justify-center text-[#5B685E] dark:text-[#98A89C] hover:bg-[#EFECE4] dark:hover:bg-[#1B3326]"
+                  >
+                    <MoreVertical className="h-4.5 w-4.5" />
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
+      )}
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-3 border-t border-[#C7CBB8]/40 dark:border-[#243B2E]">
-            <PrimaryButton
-              variant="secondary"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <PrimaryButton
+            variant="secondary"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            السابق
+          </PrimaryButton>
+          <span className="text-xs text-[#657369] tabular-nums">
+            صفحة {page} من {totalPages}
+          </span>
+          <PrimaryButton
+            variant="secondary"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            التالي
+          </PrimaryButton>
+        </div>
+      )}
+
+      {/* Account 3-Dots Options Bottom Sheet */}
+      <BottomSheet
+        open={Boolean(menuCustomer)}
+        onClose={() => setMenuCustomer(null)}
+        title={menuCustomer?.fullName || 'خيارات الحساب'}
+        subtitle={menuCustomer ? `${menuCustomer.phone} · الرصيد ${fmt(menuCustomer.cachedBalance)}` : undefined}
+      >
+        {menuCustomer && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                const id = menuCustomer.id;
+                setMenuCustomer(null);
+                navigate('new_sale', { customerId: id });
+              }}
+              className="w-full p-3.5 rounded-[16px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E5E0D4] dark:border-[#22382B] flex items-center gap-3 text-right hover:border-[#2E6046]"
             >
-              السابق
-            </PrimaryButton>
-            <span className="text-xs text-[#6B7F67] tabular-nums">
-              صفحة {page} من {totalPages}
-            </span>
-            <PrimaryButton
-              variant="secondary"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              <ShoppingBag className="h-4.5 w-4.5 text-[#1E4230] dark:text-[#86C89B]" />
+              <span className="text-sm font-bold">تسجيل عملية بيع</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const id = menuCustomer.id;
+                setMenuCustomer(null);
+                navigate('collection', { customerId: id });
+              }}
+              className="w-full p-3.5 rounded-[16px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E5E0D4] dark:border-[#22382B] flex items-center gap-3 text-right hover:border-[#2E6046]"
             >
-              التالي
-            </PrimaryButton>
+              <Banknote className="h-4.5 w-4.5 text-[#1E5638] dark:text-[#86C89B]" />
+              <span className="text-sm font-bold">تسجيل سداد / قبض</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const id = menuCustomer.id;
+                setMenuCustomer(null);
+                navigate('customer_statement', { customerId: id });
+              }}
+              className="w-full p-3.5 rounded-[16px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E5E0D4] dark:border-[#22382B] flex items-center gap-3 text-right hover:border-[#2E6046]"
+            >
+              <FileText className="h-4.5 w-4.5 text-[#244E78] dark:text-[#89BCEE]" />
+              <span className="text-sm font-bold">كشف الحساب PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const id = menuCustomer.id;
+                setMenuCustomer(null);
+                window.dispatchEvent(new CustomEvent('qatshi:open-bulk-sms', { detail: { customerId: id } }));
+              }}
+              className="w-full p-3.5 rounded-[16px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E5E0D4] dark:border-[#22382B] flex items-center gap-3 text-right hover:border-[#2E6046]"
+            >
+              <MessageSquare className="h-4.5 w-4.5 text-[#8E621C] dark:text-[#EBB354]" />
+              <span className="text-sm font-bold">إرسال رسالة تذكير SMS</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const id = menuCustomer.id;
+                setMenuCustomer(null);
+                navigate('customer_form', { customerId: id });
+              }}
+              className="w-full p-3.5 rounded-[16px] bg-[#FAF8F4] dark:bg-[#0D1A13] border border-[#E5E0D4] dark:border-[#22382B] flex items-center gap-3 text-right hover:border-[#2E6046]"
+            >
+              <Edit3 className="h-4.5 w-4.5 text-[#4C5850] dark:text-[#C5D8CA]" />
+              <span className="text-sm font-bold">تعديل بيانات العميل</span>
+            </button>
           </div>
         )}
-      </SurfaceCard>
+      </BottomSheet>
     </div>
   );
 };
@@ -688,7 +935,7 @@ export const CustomerProfileView: React.FC = () => {
       {/* TAB 1: Overview */}
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <KpiMetric
               label="المديونية الحالية"
               value={fmt(customer.cachedBalance)}
@@ -1066,7 +1313,7 @@ export const CustomerStatementView: React.FC = () => {
       />
 
       <SurfaceCard className="no-print">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-2.5">
           <div>
             <label htmlFor="stmt-customer" className="block text-xs font-medium text-[#6B7F67] mb-1">
               العميل
@@ -1084,60 +1331,61 @@ export const CustomerStatementView: React.FC = () => {
               ))}
             </select>
           </div>
-          <div>
-            <label htmlFor="stmt-from" className="block text-xs font-medium text-[#6B7F67] mb-1">
-              من تاريخ
-            </label>
-            <input
-              id="stmt-from"
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm font-mono"
-            />
-          </div>
-          <div>
-            <label htmlFor="stmt-to" className="block text-xs font-medium text-[#6B7F67] mb-1">
-              إلى تاريخ
-            </label>
-            <input
-              id="stmt-to"
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-sm font-mono"
-            />
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label htmlFor="stmt-from" className="block text-xs font-medium text-[#6B7F67] mb-1">
+                من تاريخ
+              </label>
+              <input
+                id="stmt-from"
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-xs font-mono"
+              />
+            </div>
+            <div>
+              <label htmlFor="stmt-to" className="block text-xs font-medium text-[#6B7F67] mb-1">
+                إلى تاريخ
+              </label>
+              <input
+                id="stmt-to"
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="w-full min-h-[46px] px-3 rounded-2xl border border-[#C7CBB8] dark:border-[#2C4235] bg-[#F9FAF7] dark:bg-[#0B1610] text-xs font-mono"
+              />
+            </div>
           </div>
         </div>
       </SurfaceCard>
 
       {customer && statement && (
-        <SurfaceCard className="space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-[#C7CBB8]/60 dark:border-[#243B2E]">
+        <SurfaceCard className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#C7CBB8]/60 dark:border-[#243B2E]">
             <div>
-              <div className="font-display text-lg font-bold">{org.name}</div>
+              <div className="font-display text-base font-bold">{org.name}</div>
               <div className="text-xs text-[#6B7F67]">{org.address} · {org.phone}</div>
             </div>
             <div className="text-left">
-              <div className="font-display text-base font-semibold">كشف حساب: {customer.fullName}</div>
-              <div className="text-xs text-[#6B7F67]">هاتف العميل: {customer.phone}</div>
+              <div className="font-display text-sm font-semibold">كشف حساب: {customer.fullName}</div>
+              <div className="text-xs text-[#6B7F67]">{customer.phone}</div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             <KpiMetric label="الرصيد الافتتاحي" value={fmt(statement.openingBalance)} />
             <KpiMetric label="إجمالي المشتريات" value={fmt(statement.totalPurchasesDebit)} />
             <KpiMetric label="إجمالي السداد" value={fmt(statement.totalPaymentsCredit)} tone="positive" />
-            <KpiMetric label="الخصومات" value={fmt(statement.totalDiscountsAndAdjustments)} />
             <KpiMetric
               label="الرصيد النهائي"
               value={fmt(statement.closingBalance)}
               tone={statement.closingBalance > 0 ? 'danger' : 'positive'}
+              meta={`الخصومات: ${fmt(statement.totalDiscountsAndAdjustments)}`}
             />
           </div>
 
-          {/* Mobile Cards */}
-          <div className="space-y-2.5 md:hidden">
+          <div className="space-y-2.5">
             {statement.rows.length === 0 ? (
               <p className="text-sm text-[#6B7F67] py-6 text-center">لا توجد حركات مالية في الفترة المحددة</p>
             ) : (
@@ -1169,46 +1417,6 @@ export const CustomerStatementView: React.FC = () => {
                 </div>
               ))
             )}
-          </div>
-
-          {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#0F1F17] text-white text-xs">
-                  <th className="py-2.5 px-3 text-right font-medium">التاريخ</th>
-                  <th className="py-2.5 px-3 text-right font-medium">المرجع</th>
-                  <th className="py-2.5 px-3 text-right font-medium">البيان</th>
-                  <th className="py-2.5 px-3 text-left font-medium">مدين (عليه)</th>
-                  <th className="py-2.5 px-3 text-left font-medium">دائن (له)</th>
-                  <th className="py-2.5 px-3 text-left font-medium">الرصيد المتبقي</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#C7CBB8]/40 dark:divide-[#243B2E]">
-                {statement.rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-[#6B7F67]">
-                      لا توجد حركات مالية في الفترة المحددة
-                    </td>
-                  </tr>
-                ) : (
-                  statement.rows.map((r) => (
-                    <tr key={r.entry.id}>
-                      <td className="py-2.5 px-3 text-xs tabular-nums">{formatDateArabic(r.entry.createdAt, org.dateFormat, true)}</td>
-                      <td className="py-2.5 px-3 text-xs font-medium">{formatCommercialRef(r.entry.refNumber, r.entry.refType)}</td>
-                      <td className="py-2.5 px-3">{sanitizeCommercialText(r.entry.description)}</td>
-                      <td className="py-2.5 px-3 text-left tabular-nums text-red-700 dark:text-red-400">
-                        {r.entry.debit > 0 ? fmt(r.entry.debit) : '—'}
-                      </td>
-                      <td className="py-2.5 px-3 text-left tabular-nums text-[#1E3A2E] dark:text-[#8FB98D]">
-                        {r.entry.credit > 0 ? fmt(r.entry.credit) : '—'}
-                      </td>
-                      <td className="py-2.5 px-3 text-left font-bold tabular-nums">{fmt(r.runningBalance)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
         </SurfaceCard>
       )}

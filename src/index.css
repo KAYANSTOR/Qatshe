@@ -3,17 +3,18 @@
 
 @layer base {
   :root {
-    --font-display: 'Readex Pro', 'IBM Plex Sans Arabic', system-ui, sans-serif;
-    --font-sans: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+    --font-display: 'Tajawal', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Tajawal', system-ui, -apple-system, sans-serif;
     --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 
-    /* QATSHI Material Design 3 Brand Palette */
-    --qatshi-primary-dark: #0F1F17;
-    --qatshi-deep-green: #1E3A2E;
-    --qatshi-natural-green: #3E5A3F;
-    --qatshi-calm-green: #6B7F67;
-    --qatshi-light-neutral: #C7CBB8;
-    --qatshi-olive-gray: #3D4337;
+    /* QATSHI Warm Mobile-First Card UI Palette */
+    --qatshi-primary-dark: #163022;
+    --qatshi-deep-green: #1E4230;
+    --qatshi-natural-green: #2E6046;
+    --qatshi-warm-gold: #A97D38;
+    --qatshi-calm-green: #5B7062;
+    --qatshi-light-neutral: #E4DFD4;
+    --qatshi-olive-gray: #4C5850;
 
     /* Safe Area Insets (Android Edge-to-Edge / Notch / Gesture Bar) */
     --safe-top: env(safe-area-inset-top, 0px);
@@ -29,6 +30,10 @@
 
   body {
     touch-action: manipulation;
+  }
+
+  [dir="rtl"] button {
+    text-align: right;
   }
 
   h1, h2, h3, .font-display {
@@ -52,6 +57,15 @@
   .pt-safe {
     padding-top: var(--safe-top);
   }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 @keyframes qatshiSheetUp {
@@ -72,7 +86,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 

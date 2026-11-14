@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, X } from 'lucide-react';
 import type { CurrencyCode } from '../../domain/types';
 import { formatMoney } from '../../domain/money';
@@ -8,10 +9,12 @@ export const BrandLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showWordmark?: boo
   size = 'md',
   showWordmark = true,
 }) => {
-  const dim = size === 'sm' ? 'h-9 w-9' : size === 'lg' ? 'h-16 w-16' : 'h-10 w-10';
+  const dim = size === 'sm' ? 'h-9 w-9' : size === 'lg' ? 'h-14 w-14' : 'h-11 w-11';
   return (
     <div className="flex items-center gap-2.5 shrink-0">
-      <div className={`${dim} rounded-2xl overflow-hidden bg-[#0F1F17] border border-[#3E5A3F]/40 shrink-0 shadow-xs`}>
+      <div
+        className={`${dim} rounded-2xl overflow-hidden bg-[#183526] border border-[#C69E57]/35 shrink-0 shadow-xs`}
+      >
         <img
           src={emblemImg}
           alt="شعار قاتشي"
@@ -21,11 +24,11 @@ export const BrandLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showWordmark?: boo
       </div>
       {showWordmark && (
         <div className="leading-tight whitespace-nowrap">
-          <div className="font-display text-base font-bold tracking-tight text-[#0F1F17] dark:text-[#E8EAE0]">
+          <div className="font-display text-base font-extrabold tracking-tight text-[#16281E] dark:text-[#EEF2EC]">
             قاتشي
           </div>
-          <div className="text-[11px] font-medium text-[#6B7F67] dark:text-[#9AA896]">
-            إدارة المحل والحسابات
+          <div className="text-[11px] font-medium text-[#617065] dark:text-[#98A89C]">
+            نظام الحسابات الذكي
           </div>
         </div>
       )}
@@ -36,34 +39,59 @@ export const BrandLogo: React.FC<{ size?: 'sm' | 'md' | 'lg'; showWordmark?: boo
 export const PageHeader: React.FC<{
   title: string;
   subtitle?: string;
+  icon?: React.ReactNode;
   action?: React.ReactNode;
   backAction?: () => void;
-}> = ({ title, subtitle, action, backAction }) => (
-  <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#C7CBB8]/55 dark:border-[#243B2E]">
+}> = ({ title, subtitle, icon, action, backAction }) => (
+  <header className="flex items-center justify-between gap-2.5 pb-3 pt-1 border-b border-[#E5E0D4] dark:border-[#21362A]">
+    {/* RTL Start (Right): Section icon inside tinted square + title + 1-line subtitle */}
     <div className="flex items-center gap-3 min-w-0 flex-1">
-      {backAction && (
-        <button
-          type="button"
-          onClick={backAction}
-          aria-label="رجوع"
-          className="min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-2xl border border-[#C7CBB8]/80 dark:border-[#2C4235] bg-white dark:bg-[#12241B] text-[#0F1F17] dark:text-[#E8EAE0] hover:bg-[#F4F5F0] dark:hover:bg-[#1E3A2E] active:scale-[0.97] transition-transform shrink-0"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
+      {icon && (
+        <div className="h-11 w-11 rounded-[14px] bg-[#E8EFE9] dark:bg-[#193325] text-[#1E4230] dark:text-[#8FC59B] border border-[#D4E0D6] dark:border-[#284C38] flex items-center justify-center shrink-0">
+          {icon}
+        </div>
       )}
-      <div className="min-w-0">
-        <h1 className="font-display text-xl sm:text-2xl font-bold text-[#0F1F17] dark:text-[#E8EAE0] truncate">
+      <div className="min-w-0 flex-1">
+        <h1 className="font-display text-lg font-extrabold text-[#16281E] dark:text-[#EEF2EC] truncate leading-snug">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-0.5 text-xs sm:text-sm text-[#3D4337] dark:text-[#9AA896] line-clamp-2">
+          <p className="text-xs text-[#657369] dark:text-[#9AA99E] truncate mt-0.5">
             {subtitle}
           </p>
         )}
       </div>
     </div>
-    {action && <div className="flex flex-wrap items-center gap-2 shrink-0">{action}</div>}
-  </div>
+
+    {/* RTL End (Left): Circular action buttons & optional back button */}
+    <div className="flex items-center gap-1.5 shrink-0">
+      {action}
+      {backAction && (
+        <button
+          type="button"
+          onClick={backAction}
+          aria-label="رجوع"
+          className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-[#E2DDD0] dark:border-[#274032] bg-white dark:bg-[#12231A] text-[#16281E] dark:text-[#EEF2EC] hover:bg-[#EFECE4] dark:hover:bg-[#1B3326] active:scale-[0.95] transition-transform shrink-0 shadow-2xs"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+    </div>
+  </header>
+);
+
+export const HeaderCircleButton: React.FC<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }
+> = ({ label, className = '', children, ...rest }) => (
+  <button
+    type="button"
+    aria-label={label}
+    title={label}
+    {...rest}
+    className={`h-10 w-10 inline-flex items-center justify-center rounded-full border border-[#E2DDD0] dark:border-[#274032] bg-white dark:bg-[#12231A] text-[#1E4230] dark:text-[#C5D8CA] hover:bg-[#EFECE4] dark:hover:bg-[#1B3326] active:scale-[0.95] transition-transform shrink-0 shadow-2xs ${className}`}
+  >
+    {children}
+  </button>
 );
 
 export const SurfaceCard: React.FC<{
@@ -71,7 +99,7 @@ export const SurfaceCard: React.FC<{
   className?: string;
 }> = ({ children, className = '' }) => (
   <section
-    className={`rounded-3xl bg-white dark:bg-[#12241B] border border-[#C7CBB8]/60 dark:border-[#243B2E] p-4 sm:p-6 shadow-[0_1px_2px_rgba(15,31,23,0.04)] ${className}`}
+    className={`rounded-[20px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-4 shadow-[0_2px_10px_rgba(22,40,30,0.04)] ${className}`}
   >
     {children}
   </section>
@@ -86,21 +114,25 @@ export const KpiMetric: React.FC<{
 }> = ({ label, value, meta, tone = 'default', onClick }) => {
   const valueColor =
     tone === 'danger'
-      ? 'text-red-700 dark:text-red-400'
+      ? 'text-[#B93829] dark:text-[#F07D70]'
       : tone === 'warning'
-      ? 'text-amber-700 dark:text-amber-400'
+      ? 'text-[#9E6A14] dark:text-[#EBB354]'
       : tone === 'positive'
-      ? 'text-[#1E3A2E] dark:text-[#8FB98D]'
-      : 'text-[#0F1F17] dark:text-[#E8EAE0]';
+      ? 'text-[#1E5638] dark:text-[#86C89B]'
+      : 'text-[#16281E] dark:text-[#EEF2EC]';
 
   const content = (
-    <div className="flex flex-col justify-between gap-1.5 text-right h-full">
-      <span className="text-xs font-medium text-[#3D4337] dark:text-[#9AA896]">{label}</span>
-      <span className={`font-display text-lg sm:text-2xl font-bold tabular-nums leading-snug ${valueColor}`}>
+    <div className="flex flex-col justify-between gap-1 text-right h-full min-w-0">
+      <span className="text-[11px] font-medium text-[#657369] dark:text-[#98A89C] truncate">
+        {label}
+      </span>
+      <span
+        className={`font-display text-base sm:text-lg font-extrabold tabular-nums leading-snug truncate ${valueColor}`}
+      >
         {value}
       </span>
       {meta && (
-        <span className="text-[11px] sm:text-xs text-[#6B7F67] dark:text-[#8FA38A] tabular-nums line-clamp-1">
+        <span className="text-[11px] text-[#7A877D] dark:text-[#88988C] tabular-nums truncate">
           {meta}
         </span>
       )}
@@ -112,7 +144,7 @@ export const KpiMetric: React.FC<{
       <button
         type="button"
         onClick={onClick}
-        className="w-full min-h-[88px] text-right rounded-2xl sm:rounded-3xl bg-white dark:bg-[#12241B] border border-[#C7CBB8]/65 dark:border-[#243B2E] p-4 hover:border-[#3E5A3F] dark:hover:border-[#6B7F67] active:scale-[0.985] transition-all focus-visible:outline-2 focus-visible:outline-[#3E5A3F]"
+        className="w-full min-h-[82px] text-right rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3.5 hover:border-[#2E6046] dark:hover:border-[#5D9B76] active:scale-[0.985] transition-all focus-visible:outline-2 focus-visible:outline-[#2E6046]"
       >
         {content}
       </button>
@@ -120,7 +152,7 @@ export const KpiMetric: React.FC<{
   }
 
   return (
-    <div className="rounded-2xl sm:rounded-3xl bg-white dark:bg-[#12241B] border border-[#C7CBB8]/65 dark:border-[#243B2E] p-4">
+    <div className="rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3.5">
       {content}
     </div>
   );
@@ -132,18 +164,18 @@ export const EmptyState: React.FC<{
   actionLabel?: string;
   onAction?: () => void;
 }> = ({ title, description, actionLabel, onAction }) => (
-  <div className="rounded-3xl border border-dashed border-[#C7CBB8] dark:border-[#2C4235] bg-white/60 dark:bg-[#12241B]/50 p-7 sm:p-9 text-center">
-    <h3 className="font-display text-base font-semibold text-[#0F1F17] dark:text-[#E8EAE0]">
+  <div className="rounded-[20px] border border-dashed border-[#D6CFC0] dark:border-[#294234] bg-white/70 dark:bg-[#12231A]/60 p-6 text-center">
+    <h3 className="font-display text-base font-bold text-[#16281E] dark:text-[#EEF2EC]">
       {title}
     </h3>
-    <p className="mt-1.5 text-sm text-[#3D4337] dark:text-[#9AA896] max-w-md mx-auto leading-relaxed">
+    <p className="mt-1.5 text-xs sm:text-sm text-[#617065] dark:text-[#9AA99E] max-w-sm mx-auto leading-relaxed">
       {description}
     </p>
     {actionLabel && onAction && (
       <button
         type="button"
         onClick={onAction}
-        className="mt-5 min-h-[48px] px-6 py-2.5 rounded-2xl bg-[#0F1F17] dark:bg-[#3E5A3F] text-white text-sm font-medium hover:bg-[#1E3A2E] active:scale-[0.98] transition-all whitespace-nowrap"
+        className="mt-4 min-h-[46px] px-5 py-2.5 rounded-2xl bg-[#1E4230] dark:bg-[#2E6046] text-white text-sm font-bold hover:bg-[#163022] active:scale-[0.98] transition-all whitespace-nowrap"
       >
         {actionLabel}
       </button>
@@ -156,17 +188,17 @@ export const PrimaryButton: React.FC<
 > = ({ variant = 'primary', className = '', children, ...rest }) => {
   const styles =
     variant === 'primary'
-      ? 'bg-[#0F1F17] hover:bg-[#1E3A2E] text-white dark:bg-[#3E5A3F] dark:hover:bg-[#4D6E4E] shadow-xs'
+      ? 'bg-[#1E4230] hover:bg-[#163022] text-white dark:bg-[#2E6046] dark:hover:bg-[#3A7557] shadow-xs'
       : variant === 'secondary'
-      ? 'bg-[#E9ECE2] hover:bg-[#DCE0D2] text-[#0F1F17] dark:bg-[#1E3A2E] dark:hover:bg-[#274B3C] dark:text-[#E8EAE0]'
+      ? 'bg-[#EFECE4] hover:bg-[#E4DFD4] text-[#16281E] dark:bg-[#1B3326] dark:hover:bg-[#244333] dark:text-[#EEF2EC]'
       : variant === 'danger'
-      ? 'bg-red-700 hover:bg-red-800 text-white'
-      : 'bg-transparent hover:bg-[#E9ECE2]/70 dark:hover:bg-[#1E3A2E]/60 text-[#0F1F17] dark:text-[#E8EAE0]';
+      ? 'bg-[#B93829] hover:bg-[#9D2D20] text-white'
+      : 'bg-transparent hover:bg-[#EFECE4]/80 dark:hover:bg-[#1B3326]/60 text-[#16281E] dark:text-[#EEF2EC]';
 
   return (
     <button
       {...rest}
-      className={`min-h-[46px] px-4 py-2.5 rounded-2xl text-sm font-medium inline-flex items-center justify-center gap-2 transition-all active:scale-[0.98] whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[#3E5A3F] ${styles} ${className}`}
+      className={`min-h-[46px] px-4 py-2.5 rounded-[16px] text-sm font-semibold inline-flex items-center justify-center gap-2 transition-all active:scale-[0.98] whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[#2E6046] ${styles} ${className}`}
     >
       {children}
     </button>
@@ -180,7 +212,7 @@ export const MoneyText: React.FC<{
   locale?: 'ar-YE' | 'en-US';
   className?: string;
 }> = ({ amount, currency = 'YER', decimals = 0, locale = 'en-US', className = '' }) => (
-  <span className={`tabular-nums font-medium ${className}`}>
+  <span className={`tabular-nums font-bold ${className}`}>
     {formatMoney(amount, currency, decimals, locale)}
   </span>
 );
@@ -190,12 +222,12 @@ export const StepProgress: React.FC<{
   totalSteps: number;
   stepTitle: string;
 }> = ({ currentStep, totalSteps, stepTitle }) => (
-  <div className="rounded-2xl bg-white dark:bg-[#12241B] border border-[#C7CBB8]/60 dark:border-[#243B2E] p-3.5 sm:p-4 space-y-2.5">
+  <div className="rounded-[18px] bg-white dark:bg-[#12231A] border border-[#E6E1D5] dark:border-[#22382B] p-3.5 space-y-2.5">
     <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
-      <span className="font-display font-bold text-[#0F1F17] dark:text-[#E8EAE0]">
+      <span className="font-display font-bold text-[#16281E] dark:text-[#EEF2EC]">
         {stepTitle}
       </span>
-      <span className="text-xs font-medium text-[#6B7F67] dark:text-[#9AA896] tabular-nums shrink-0">
+      <span className="text-xs font-medium text-[#657369] dark:text-[#98A89C] tabular-nums shrink-0">
         الخطوة {currentStep} من {totalSteps}
       </span>
     </div>
@@ -206,7 +238,7 @@ export const StepProgress: React.FC<{
           <div
             key={idx}
             className={`h-1.5 rounded-full transition-colors ${
-              active ? 'bg-[#1E3A2E] dark:bg-[#8FB98D]' : 'bg-[#E5E8DD] dark:bg-[#1E3A2E]/40'
+              active ? 'bg-[#1E4230] dark:bg-[#86C89B]' : 'bg-[#EAE6DC] dark:bg-[#1B3326]'
             }`}
           />
         );
@@ -220,9 +252,10 @@ export const BottomSheet: React.FC<{
   onClose: () => void;
   title: string;
   subtitle?: string;
+  headerIcon?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
-}> = ({ open, onClose, title, subtitle, children, footer }) => {
+}> = ({ open, onClose, title, subtitle, headerIcon, children, footer }) => {
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -232,54 +265,62 @@ export const BottomSheet: React.FC<{
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center no-print"
+      className="fixed inset-0 z-[60] flex items-end justify-center no-print"
     >
       <div
-        className="fixed inset-0 bg-black/55 backdrop-blur-xs"
+        className="fixed inset-0 bg-black/50 backdrop-blur-[2px]"
         onClick={onClose}
       />
-      <div className="relative w-full sm:max-w-lg bg-white dark:bg-[#12241B] border-t sm:border border-[#C7CBB8]/70 dark:border-[#243B2E] rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[88vh] flex flex-col animate-sheet-up">
-        {/* Android Grab Handle */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center shrink-0">
-          <div className="w-10 h-1.5 rounded-full bg-[#C7CBB8] dark:bg-[#2C4235]" />
+      <div className="relative w-full max-w-[480px] bg-white dark:bg-[#12231A] border-t border-x border-[#E2DDD0] dark:border-[#22382B] rounded-t-[26px] shadow-2xl max-h-[90vh] flex flex-col animate-sheet-up">
+        {/* Drag Handle */}
+        <div className="pt-2.5 pb-1 flex justify-center shrink-0">
+          <div className="w-11 h-1.5 rounded-full bg-[#D7D1C4] dark:bg-[#2B4637]" />
         </div>
 
-        <div className="px-5 py-3.5 border-b border-[#C7CBB8]/45 dark:border-[#243B2E] flex items-center justify-between gap-3 shrink-0">
-          <div className="min-w-0">
-            <h3 className="font-display text-base sm:text-lg font-bold text-[#0F1F17] dark:text-[#E8EAE0] truncate">
-              {title}
-            </h3>
-            {subtitle && (
-              <p className="text-xs text-[#6B7F67] dark:text-[#9AA896] truncate">{subtitle}</p>
+        <div className="px-4 py-3 border-b border-[#EFEBE2] dark:border-[#203529] flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {headerIcon && (
+              <div className="h-10 w-10 rounded-[13px] bg-[#E8EFE9] dark:bg-[#193325] text-[#1E4230] dark:text-[#86C89B] flex items-center justify-center shrink-0">
+                {headerIcon}
+              </div>
             )}
+            <div className="min-w-0 flex-1 text-right">
+              <h3 className="font-display text-base font-extrabold text-[#16281E] dark:text-[#EEF2EC] truncate">
+                {title}
+              </h3>
+              {subtitle && (
+                <p className="text-xs text-[#657369] dark:text-[#98A89C] truncate">{subtitle}</p>
+              )}
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="إغلاق"
-            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-2xl hover:bg-[#EFF1EA] dark:hover:bg-[#1E3A2E] text-[#3D4337] dark:text-[#C7CBB8] shrink-0"
+            className="h-10 w-10 inline-flex items-center justify-center rounded-full bg-[#F5F2EA] dark:bg-[#193325] text-[#4C5850] dark:text-[#C5D8CA] hover:bg-[#EAE5D9] shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {children}
         </div>
 
         {footer && (
-          <div className="px-5 py-3.5 border-t border-[#C7CBB8]/45 dark:border-[#243B2E] bg-[#F9FAF7] dark:bg-[#0F1F17] pb-safe rounded-b-none sm:rounded-b-3xl shrink-0">
+          <div className="px-4 py-3 border-t border-[#EFEBE2] dark:border-[#203529] bg-[#FAF8F4] dark:bg-[#0D1A13] pb-safe shrink-0">
             {footer}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

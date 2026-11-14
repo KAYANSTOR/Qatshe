@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, Download, Printer, RotateCcw, Search, Share2 } from 'lucide-react';
+import { Banknote, Download, HandCoins, Printer, ReceiptText, RotateCcw, Search, Share2 } from 'lucide-react';
 import { useQatshi } from '../context/QatshiContext';
 import { classifyDebtAging, computeOpenSaleRemainingMap } from '../domain/accounting';
 import { formatCommercialRef } from '../domain/formatters';
@@ -74,15 +74,16 @@ export const DebtsView: React.FC = () => {
       <PageHeader
         title="الديون والتحصيل"
         subtitle={`${debtData.filteredDebtors.length} عميل عليه رصيد مستحق`}
+        icon={<HandCoins className="h-5 w-5" />}
         action={
           <PrimaryButton onClick={() => navigate('collection')}>
             <Banknote className="h-4 w-4" />
-            تسجيل سداد
+            سداد
           </PrimaryButton>
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <KpiMetric label="إجمالي الديون المستحقة" value={fmt(debtData.totalDebt)} tone="danger" />
         <KpiMetric label="ديون جديدة اليوم" value={fmt(debtData.newDebtsToday)} tone="warning" />
         <KpiMetric label="فواتير متأخرة (+7 أيام)" value={String(debtData.aging.overdueCount)} tone="warning" />
@@ -90,8 +91,8 @@ export const DebtsView: React.FC = () => {
       </div>
 
       <SurfaceCard className="space-y-3">
-        <h2 className="font-display text-sm sm:text-base font-bold">أعمار الديون</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <h2 className="font-display text-sm font-bold">أعمار الديون</h2>
+        <div className="grid grid-cols-2 gap-2.5">
           <KpiMetric label="1 إلى 7 أيام" value={fmt(debtData.aging.bucket1_7)} />
           <KpiMetric label="8 إلى 30 يوماً" value={fmt(debtData.aging.bucket8_30)} tone="warning" />
           <KpiMetric label="31 إلى 60 يوماً" value={fmt(debtData.aging.bucket31_60)} tone="warning" />
@@ -291,10 +292,11 @@ export const CollectionView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title="تسجيل سداد"
         subtitle="تحصيل سريع مع احتساب الرصيد المتبقي فوراً"
+        icon={<Banknote className="h-5 w-5" />}
         backAction={() => navigate('debts')}
       />
 
@@ -587,28 +589,28 @@ export const ReceiptView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="space-y-4">
       <PageHeader
         title={displayNumber}
         subtitle={`${payment.customerName} · ${formatDateArabic(payment.createdAt, org.dateFormat, true)}`}
+        icon={<ReceiptText className="h-5 w-5" />}
         backAction={() => navigate('collection')}
-        action={
-          <div className="flex flex-wrap gap-2 no-print">
-            <PrimaryButton variant="secondary" onClick={() => window.print()}>
-              <Printer className="h-4 w-4" />
-              طباعة
-            </PrimaryButton>
-            <PrimaryButton variant="secondary" onClick={() => handleDownloadPdf(true)}>
-              <Share2 className="h-4 w-4" />
-              مشاركة PDF
-            </PrimaryButton>
-            <PrimaryButton onClick={() => handleDownloadPdf(false)}>
-              <Download className="h-4 w-4" />
-              تنزيل PDF
-            </PrimaryButton>
-          </div>
-        }
       />
+
+      <div className="grid grid-cols-3 gap-2 no-print">
+        <PrimaryButton variant="secondary" onClick={() => window.print()}>
+          <Printer className="h-4 w-4" />
+          طباعة
+        </PrimaryButton>
+        <PrimaryButton variant="secondary" onClick={() => handleDownloadPdf(true)}>
+          <Share2 className="h-4 w-4" />
+          مشاركة
+        </PrimaryButton>
+        <PrimaryButton onClick={() => handleDownloadPdf(false)}>
+          <Download className="h-4 w-4" />
+          PDF
+        </PrimaryButton>
+      </div>
 
       <SurfaceCard className="space-y-4">
         <div className="flex justify-between items-start pb-4 border-b border-[#C7CBB8]/60 dark:border-[#243B2E]">
