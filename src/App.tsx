@@ -1,6 +1,8 @@
 import React from 'react';
 import { QatshiProvider, useQatshi } from './context/QatshiContext';
 import { AppShell } from './components/layout/AppShell';
+import { AccountAuthView } from './views/AccountAuthView';
+import { getCurrentAuthUser } from './services/authService';
 import {
   CustomerFormView,
   CustomerProfileView,
@@ -103,12 +105,26 @@ const ScreenRouter: React.FC = () => {
   }
 };
 
+const AuthGate: React.FC = () => {
+  const [checking, setChecking] = React.useState(true);
+  const [authenticated, setAuthenticated] = React.useState(false);
+
+  React.useEffect(() => {
+    getCurrentAuthUser().then((user) => {
+      setAuthenticated(Boolean(user));
+      setChecking(false);
+    });
+  }, []);
+
+  if (checking) return <div className="min-h-screen bg-[#0F1F17]" />;
+  if (!authenticated) return <AccountAuthView onAuthenticated={() => setAuthenticated(true)} />;
+  return <AppShell><ScreenRouter /></AppShell>;
+};
+
 export default function App() {
   return (
     <QatshiProvider>
-      <AppShell>
-        <ScreenRouter />
-      </AppShell>
+      <AuthGate />
     </QatshiProvider>
   );
 }
