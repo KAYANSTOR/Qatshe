@@ -301,6 +301,21 @@ export function createQatshiApp() {
     });
   });
 
+  app.get('/api/integration/health', (_req, res) => {
+    res.json({ ok: true, service: 'qatshe', capabilities: ['health', 'capabilities', 'revalidate'], timestamp: new Date().toISOString() });
+  });
+
+  app.post('/api/integration/command', (req, res) => {
+    const secret = process.env.HUB_INTEGRATION_SECRET;
+    const provided = req.header('x-hub-signature') || '';
+    const raw = JSON.stringify(req.body || {});
+    const expected = secret ? crypto.createHmac('sha256', secret).update(raw).digest('hex') : '';
+    const valid = Boolean(secret) && provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+    if (!valid) return res.status(401).json({ error: 'invalid_hub_signature' });
+    if (req.body?.command !== 'revalidate') return res.status(400).json({ error: 'unsupported_command' });
+    return res.status(202).json({ ok: true, accepted: true, command: 'revalidate', timestamp: new Date().toISOString() });
+  });
+
   app.get('/api/auth/me', async (req, res) => {
     try {
       const account = await accountFromRequest(req);
