@@ -176,7 +176,7 @@ function clearSessionCookie(req: express.Request, res: express.Response) {
   );
 }
 
-async function initializeDatabase() {
+export async function initializeDatabase() {
   if (!database) return;
   await database.query(`
     CREATE TABLE IF NOT EXISTS qatshi_accounts (
@@ -658,7 +658,7 @@ export function createQatshiApp() {
   return app;
 }
 
-async function startServer() {
+export async function startServer() {
   await initializeDatabase();
   const app = createQatshiApp();
   const port = Number(process.env.PORT || 3000);
@@ -687,6 +687,6 @@ async function startServer() {
   });
 }
 
-if (process.env.QATSHI_TEST_NO_LISTEN !== '1') {
+if (process.env.QATSHI_TEST_NO_LISTEN !== '1' && !process.env.VERCEL) {
   startServer();
 }
