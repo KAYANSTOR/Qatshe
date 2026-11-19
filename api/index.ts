@@ -1,4 +1,4 @@
-import { createQatshiApp, initializeDatabase } from '../server';
+import { createQatshiApp, initializeDatabase } from '../server.ts';
 
 const app = createQatshiApp();
 let databaseReady: Promise<void> | undefined;
