@@ -4,7 +4,6 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Pool } from 'pg';
-import { createServer as createViteServer } from 'vite';
 
 export interface SyncOpInput {
   id: string;
@@ -664,6 +663,7 @@ export async function startServer() {
   const port = Number(process.env.PORT || 3000);
 
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await (0, eval)('import("vite")');
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
